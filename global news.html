@@ -1,0 +1,3650 @@
+`html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>TerraPulse — Interactive 3D Globe News Explorer</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@6.18.0/dist/maplibre-gl.css" />
+  <style>
+    :root {
+      --bg-space: #030712;
+      --glass-bg: rgba(9, 15, 29, 0.80);
+      --glass-bg-strong: rgba(8, 13, 26, 0.92);
+      --glass-border: rgba(148, 163, 184, 0.18);
+      --glass-border-hover: rgba(56, 189, 248, 0.42);
+      --text-primary: #f8fafc;
+      --text-secondary: #cbd5e1;
+      --text-muted: #94a3b8;
+      --accent-cyan: #38bdf8;
+      --accent-blue: #3b82f6;
+      --accent-emerald: #10b981;
+      --accent-amber: #f59e0b;
+      --accent-rose: #f43f5e;
+      --accent-violet: #a855f7;
+      --accent-teal: #14b8a6;
+      --accent-pink: #ec4899;
+      --radius-lg: 16px;
+      --radius-md: 12px;
+      --radius-sm: 8px;
+      --shadow-glass: 0 18px 48px rgba(0, 0, 0, 0.55);
+      --transition-ui: 0.28s cubic-bezier(0.22, 1, 0.36, 1);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    html, body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background-color: var(--bg-space);
+      color: var(--text-primary);
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* Subtle Deep-Space Starfield Backdrop */
+    #space-backdrop {
+      position: fixed;
+      inset: 0;
+      z-index: 0;
+      background:
+        radial-gradient(circle at 22% 28%, rgba(30, 64, 175, 0.16) 0%, transparent 45%),
+        radial-gradient(circle at 78% 72%, rgba(14, 165, 233, 0.12) 0%, transparent 48%),
+        radial-gradient(ellipse at center, #071024 0%, #030712 72%, #02040a 100%);
+      pointer-events: none;
+    }
+
+    #starfield {
+      position: fixed;
+      inset: 0;
+      z-index: 0;
+      pointer-events: none;
+      opacity: 0.72;
+    }
+
+    /* Fullscreen MapLibre 3D Globe */
+    #map {
+      position: fixed;
+      inset: 0;
+      z-index: 1;
+      background: transparent;
+    }
+
+    .maplibregl-canvas {
+      outline: none;
+    }
+
+    /* MapLibre Controls Styling */
+    .maplibregl-ctrl-top-right {
+      top: 116px !important;
+      right: 16px !important;
+      transition: right var(--transition-ui), top var(--transition-ui);
+      z-index: 15;
+    }
+
+    body.detail-open .maplibregl-ctrl-top-right {
+      right: 416px !important;
+    }
+
+    .maplibregl-ctrl-group {
+      background: var(--glass-bg) !important;
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid var(--glass-border) !important;
+      border-radius: 12px !important;
+      box-shadow: var(--shadow-glass) !important;
+      overflow: hidden;
+    }
+
+    .maplibregl-ctrl-group button {
+      width: 34px !important;
+      height: 34px !important;
+      background-color: transparent !important;
+      border-bottom: 1px solid rgba(148, 163, 184, 0.12) !important;
+      color: var(--text-primary) !important;
+      transition: background-color 0.18s ease;
+    }
+
+    .maplibregl-ctrl-group button:last-child {
+      border-bottom: none !important;
+    }
+
+    .maplibregl-ctrl-group button:hover {
+      background-color: rgba(56, 189, 248, 0.16) !important;
+    }
+
+    .maplibregl-ctrl-icon {
+      filter: invert(1) brightness(1.15);
+    }
+
+    .maplibregl-ctrl-attrib {
+      background: rgba(6, 11, 23, 0.68) !important;
+      color: var(--text-muted) !important;
+      font-size: 10px !important;
+      border-radius: 8px 0 0 0 !important;
+      backdrop-filter: blur(8px);
+    }
+
+    .maplibregl-ctrl-attrib a {
+      color: var(--text-secondary) !important;
+    }
+
+    /* Custom Popups */
+    .maplibregl-popup {
+      z-index: 25;
+      pointer-events: none;
+    }
+
+    .maplibregl-popup-content {
+      background: var(--glass-bg-strong) !important;
+      backdrop-filter: blur(16px);
+      border: 1px solid rgba(148, 163, 184, 0.25);
+      border-radius: 12px !important;
+      padding: 10px 12px !important;
+      color: var(--text-primary) !important;
+      box-shadow: 0 12px 32px rgba(0, 0, 0, 0.6) !important;
+      max-width: 260px;
+    }
+
+    .maplibregl-popup-tip {
+      border-top-color: rgba(8, 13, 26, 0.92) !important;
+      border-bottom-color: rgba(8, 13, 26, 0.92) !important;
+    }
+
+    /* Clickable City Hub Markers on Globe */
+    .city-marker {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 9px 4px 7px;
+      border-radius: 999px;
+      background: rgba(7, 13, 26, 0.84);
+      border: 1px solid rgba(56, 189, 248, 0.38);
+      backdrop-filter: blur(10px);
+      color: #f8fafc;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.01em;
+      cursor: pointer;
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+      transition: transform 0.18s ease, border-color 0.18s ease, background 0.18s ease;
+      white-space: nowrap;
+      user-select: none;
+    }
+
+    .city-marker:hover,
+    .city-marker.active {
+      transform: scale(1.08);
+      background: rgba(14, 116, 144, 0.9);
+      border-color: #7dd3fc;
+      z-index: 10;
+    }
+
+    .city-marker-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--accent-cyan);
+      box-shadow: 0 0 8px var(--accent-cyan);
+      flex-shrink: 0;
+    }
+
+    .city-marker-count {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px;
+      padding: 1px 5px;
+      border-radius: 999px;
+      background: rgba(56, 189, 248, 0.18);
+      color: #7dd3fc;
+    }
+
+    /* Active Selected Story Pulse Ring */
+    .selected-pulse-marker {
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      border: 2px solid #ffffff;
+      box-shadow: 0 0 18px rgba(56, 189, 248, 0.95);
+      position: relative;
+      pointer-events: none;
+    }
+
+    .selected-pulse-marker::after {
+      content: '';
+      position: absolute;
+      inset: -8px;
+      border-radius: 50%;
+      border: 2px solid rgba(56, 189, 248, 0.85);
+      animation: radarPulse 1.8s infinite ease-out;
+    }
+
+    @keyframes radarPulse {
+      0% { transform: scale(0.7); opacity: 0.95; }
+      100% { transform: scale(1.9); opacity: 0; }
+    }
+
+    /* Center Crosshair for Local Auto-Load Mode */
+    #center-reticle {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      width: 34px;
+      height: 34px;
+      transform: translate(-50%, -50%);
+      z-index: 4;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.3s ease;
+    }
+
+    body.local-mode #center-reticle {
+      opacity: 0.72;
+    }
+
+    /* Top Command Header */
+    .top-command-bar {
+      position: fixed;
+      top: 12px;
+      left: 16px;
+      right: 16px;
+      z-index: 30;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      pointer-events: none;
+    }
+
+    .header-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      pointer-events: auto;
+      background: var(--glass-bg);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border: 1px solid var(--glass-border);
+      border-radius: var(--radius-lg);
+      padding: 8px 12px;
+      box-shadow: var(--shadow-glass);
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-shrink: 0;
+      padding-right: 6px;
+    }
+
+    .brand-orb {
+      width: 34px;
+      height: 34px;
+      border-radius: 10px;
+      background: linear-gradient(135deg, #0284c7 0%, #2563eb 55%, #0ea5e9 100%);
+      display: grid;
+      place-items: center;
+      box-shadow: 0 0 20px rgba(56, 189, 248, 0.35);
+      position: relative;
+    }
+
+    .brand-orb::after {
+      content: '';
+      position: absolute;
+      top: -2px;
+      right: -2px;
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
+      background: var(--accent-emerald);
+      border: 2px solid #090f1d;
+      box-shadow: 0 0 8px var(--accent-emerald);
+    }
+
+    .brand-text h1 {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 16px;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      line-height: 1.1;
+    }
+
+    .brand-text span {
+      display: block;
+      font-size: 10.5px;
+      color: var(--text-muted);
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+
+    /* Search Box */
+    .search-wrapper {
+      position: relative;
+      flex: 1;
+      max-width: 480px;
+    }
+
+    .search-input-box {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: rgba(15, 23, 42, 0.72);
+      border: 1px solid rgba(148, 163, 184, 0.22);
+      border-radius: 11px;
+      padding: 0 12px;
+      height: 38px;
+      transition: border-color 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    .search-input-box:focus-within {
+      border-color: var(--accent-cyan);
+      box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.15);
+    }
+
+    .search-input-box input {
+      width: 100%;
+      background: transparent;
+      border: none;
+      outline: none;
+      color: var(--text-primary);
+      font-size: 13px;
+      font-family: inherit;
+    }
+
+    .search-input-box input::placeholder {
+      color: var(--text-muted);
+    }
+
+    .clear-search-btn {
+      background: none;
+      border: none;
+      color: var(--text-muted);
+      cursor: pointer;
+      display: none;
+      padding: 2px;
+      font-size: 16px;
+      line-height: 1;
+    }
+
+    .clear-search-btn.visible {
+      display: block;
+    }
+
+    .search-dropdown {
+      position: absolute;
+      top: calc(100% + 8px);
+      left: 0;
+      right: 0;
+      background: var(--glass-bg-strong);
+      backdrop-filter: blur(22px);
+      border: 1px solid var(--glass-border);
+      border-radius: 14px;
+      box-shadow: 0 24px 56px rgba(0, 0, 0, 0.7);
+      max-height: 380px;
+      overflow-y: auto;
+      display: none;
+      z-index: 60;
+      padding: 6px;
+    }
+
+    .search-dropdown.open {
+      display: block;
+    }
+
+    .search-section-label {
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      padding: 8px 10px 4px;
+    }
+
+    .search-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 8px 10px;
+      border-radius: 9px;
+      cursor: pointer;
+      transition: background 0.15s ease;
+    }
+
+    .search-item:hover {
+      background: rgba(56, 189, 248, 0.14);
+    }
+
+    .search-item-icon {
+      width: 28px;
+      height: 28px;
+      border-radius: 8px;
+      background: rgba(56, 189, 248, 0.12);
+      color: var(--accent-cyan);
+      display: grid;
+      place-items: center;
+      flex-shrink: 0;
+      font-size: 13px;
+    }
+
+    .search-item-meta {
+      min-width: 0;
+      flex: 1;
+    }
+
+    .search-item-title {
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--text-primary);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .search-item-sub {
+      font-size: 11px;
+      color: var(--text-muted);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    /* Header Action Buttons */
+    .header-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-left: auto;
+      flex-shrink: 0;
+    }
+
+    .pill-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      height: 36px;
+      padding: 0 12px;
+      border-radius: 10px;
+      border: 1px solid var(--glass-border);
+      background: rgba(15, 23, 42, 0.68);
+      color: var(--text-secondary);
+      font-size: 12px;
+      font-weight: 600;
+      font-family: inherit;
+      cursor: pointer;
+      transition: all 0.18s ease;
+      white-space: nowrap;
+    }
+
+    .pill-btn:hover {
+      border-color: var(--glass-border-hover);
+      color: var(--text-primary);
+      background: rgba(30, 41, 59, 0.85);
+    }
+
+    .pill-btn.active {
+      background: rgba(14, 165, 233, 0.2);
+      border-color: var(--accent-cyan);
+      color: #e0f2fe;
+    }
+
+    .saved-count-badge {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      padding: 1px 6px;
+      border-radius: 999px;
+      background: rgba(56, 189, 248, 0.22);
+      color: #7dd3fc;
+    }
+
+    /* Category Filter Bar */
+    .category-bar {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      overflow-x: auto;
+      scrollbar-width: none;
+      padding: 2px 2px 4px;
+      pointer-events: auto;
+    }
+
+    .category-bar::-webkit-scrollbar {
+      display: none;
+    }
+
+    .cat-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      height: 30px;
+      padding: 0 12px;
+      border-radius: 999px;
+      background: var(--glass-bg);
+      backdrop-filter: blur(14px);
+      border: 1px solid var(--glass-border);
+      color: var(--text-secondary);
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: all 0.18s ease;
+      box-shadow: 0 6px 18px rgba(0, 0, 0, 0.28);
+    }
+
+    .cat-chip:hover {
+      border-color: rgba(255, 255, 255, 0.35);
+      color: #fff;
+      transform: translateY(-1px);
+    }
+
+    .cat-chip.active {
+      background: rgba(248, 250, 252, 0.94);
+      color: #090f1d;
+      border-color: #ffffff;
+      font-weight: 600;
+    }
+
+    .cat-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+    }
+
+    /* Left Feed Panel */
+    .left-panel {
+      position: fixed;
+      top: 116px;
+      left: 16px;
+      bottom: 16px;
+      width: 344px;
+      z-index: 20;
+      background: var(--glass-bg);
+      backdrop-filter: blur(22px);
+      -webkit-backdrop-filter: blur(22px);
+      border: 1px solid var(--glass-border);
+      border-radius: var(--radius-lg);
+      box-shadow: var(--shadow-glass);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      transition: transform var(--transition-ui);
+    }
+
+    .left-panel.collapsed {
+      transform: translateX(calc(-100% - 20px));
+    }
+
+    .panel-collapse-fab {
+      position: fixed;
+      top: 124px;
+      left: 16px;
+      z-index: 19;
+      display: none;
+      align-items: center;
+      gap: 6px;
+      height: 36px;
+      padding: 0 12px;
+      border-radius: 10px;
+      background: var(--glass-bg);
+      backdrop-filter: blur(16px);
+      border: 1px solid var(--glass-border);
+      color: var(--text-primary);
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      box-shadow: var(--shadow-glass);
+    }
+
+    .left-panel.collapsed + .panel-collapse-fab {
+      display: inline-flex;
+    }
+
+    .panel-tabs-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 12px 0;
+      border-bottom: 1px solid rgba(148, 163, 184, 0.14);
+      gap: 8px;
+    }
+
+    .tabs-group {
+      display: flex;
+      gap: 4px;
+      flex: 1;
+    }
+
+    .tab-btn {
+      flex: 1;
+      background: transparent;
+      border: none;
+      border-bottom: 2px solid transparent;
+      color: var(--text-muted);
+      font-size: 12px;
+      font-weight: 600;
+      font-family: inherit;
+      padding: 8px 6px 10px;
+      cursor: pointer;
+      transition: color 0.18s ease, border-color 0.18s ease;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 5px;
+      white-space: nowrap;
+    }
+
+    .tab-btn:hover {
+      color: var(--text-primary);
+    }
+
+    .tab-btn.active {
+      color: var(--accent-cyan);
+      border-bottom-color: var(--accent-cyan);
+    }
+
+    .icon-btn-sm {
+      width: 28px;
+      height: 28px;
+      border-radius: 8px;
+      border: 1px solid transparent;
+      background: transparent;
+      color: var(--text-muted);
+      cursor: pointer;
+      display: grid;
+      place-items: center;
+      transition: all 0.16s ease;
+      margin-bottom: 6px;
+    }
+
+    .icon-btn-sm:hover {
+      background: rgba(148, 163, 184, 0.14);
+      color: var(--text-primary);
+    }
+
+    /* Local Radar Status Banner inside Left Panel */
+    .radar-status-strip {
+      padding: 9px 14px;
+      background: rgba(14, 165, 233, 0.1);
+      border-bottom: 1px solid rgba(56, 189, 248, 0.18);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      font-size: 11.5px;
+    }
+
+    .radar-status-left {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      min-width: 0;
+    }
+
+    .live-pulse-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--accent-emerald);
+      box-shadow: 0 0 8px var(--accent-emerald);
+      flex-shrink: 0;
+      animation: blinkSoft 2s infinite;
+    }
+
+    @keyframes blinkSoft {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.35; }
+    }
+
+    .feed-scroll {
+      flex: 1;
+      overflow-y: auto;
+      padding: 10px 12px 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      scrollbar-width: thin;
+      scrollbar-color: rgba(148, 163, 184, 0.25) transparent;
+    }
+
+    .story-card {
+      background: rgba(15, 23, 42, 0.56);
+      border: 1px solid rgba(148, 163, 184, 0.14);
+      border-radius: 12px;
+      padding: 12px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      position: relative;
+    }
+
+    .story-card:hover {
+      background: rgba(30, 41, 59, 0.78);
+      border-color: rgba(56, 189, 248, 0.35);
+      transform: translateY(-1px);
+    }
+
+    .story-card.selected {
+      background: rgba(14, 116, 144, 0.22);
+      border-color: var(--accent-cyan);
+    }
+
+    .story-card-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      margin-bottom: 6px;
+    }
+
+    .badge-cat {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 10.5px;
+      font-weight: 600;
+      padding: 2px 8px;
+      border-radius: 999px;
+      letter-spacing: 0.02em;
+    }
+
+    .story-loc {
+      font-size: 11px;
+      color: var(--text-muted);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .story-card-title {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 13.8px;
+      font-weight: 600;
+      line-height: 1.35;
+      color: var(--text-primary);
+      margin-bottom: 6px;
+    }
+
+    .story-card-foot {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 11px;
+      color: var(--text-muted);
+      gap: 8px;
+    }
+
+    .bookmark-mini-btn {
+      background: none;
+      border: none;
+      color: var(--text-muted);
+      cursor: pointer;
+      padding: 3px;
+      border-radius: 6px;
+      display: grid;
+      place-items: center;
+      transition: color 0.15s ease, transform 0.15s ease;
+    }
+
+    .bookmark-mini-btn:hover {
+      color: var(--accent-amber);
+      transform: scale(1.12);
+    }
+
+    .bookmark-mini-btn.saved {
+      color: var(--accent-amber);
+    }
+
+    /* Right Regional News Detail Panel */
+    .detail-panel {
+      position: fixed;
+      top: 116px;
+      right: 16px;
+      bottom: 16px;
+      width: 386px;
+      z-index: 22;
+      background: var(--glass-bg-strong);
+      backdrop-filter: blur(24px);
+      -webkit-backdrop-filter: blur(24px);
+      border: 1px solid var(--glass-border);
+      border-radius: var(--radius-lg);
+      box-shadow: var(--shadow-glass);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      transform: translateX(calc(100% + 28px));
+      transition: transform var(--transition-ui);
+    }
+
+    body.detail-open .detail-panel {
+      transform: translateX(0);
+    }
+
+    .detail-header {
+      padding: 14px 16px 12px;
+      border-bottom: 1px solid rgba(148, 163, 184, 0.15);
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 10px;
+      background: rgba(15, 23, 42, 0.55);
+    }
+
+    .detail-location-block {
+      min-width: 0;
+    }
+
+    .detail-location-title {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--accent-cyan);
+    }
+
+    .detail-coords {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-top: 3px;
+    }
+
+    .detail-body {
+      flex: 1;
+      overflow-y: auto;
+      padding: 16px;
+      scrollbar-width: thin;
+      scrollbar-color: rgba(148, 163, 184, 0.25) transparent;
+    }
+
+    .detail-meta-row {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 10px;
+    }
+
+    .detail-headline {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 20px;
+      font-weight: 700;
+      line-height: 1.28;
+      letter-spacing: -0.015em;
+      margin-bottom: 12px;
+      color: #ffffff;
+    }
+
+    .detail-source-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 9px 12px;
+      border-radius: 10px;
+      background: rgba(30, 41, 59, 0.52);
+      border: 1px solid rgba(148, 163, 184, 0.14);
+      font-size: 12px;
+      margin-bottom: 14px;
+    }
+
+    .detail-summary {
+      font-size: 13.8px;
+      line-height: 1.65;
+      color: var(--text-secondary);
+      margin-bottom: 14px;
+    }
+
+    .detail-takeaways {
+      background: rgba(14, 165, 233, 0.08);
+      border: 1px solid rgba(56, 189, 248, 0.2);
+      border-radius: 12px;
+      padding: 12px 14px;
+      margin-bottom: 16px;
+    }
+
+    .detail-takeaways h4 {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--accent-cyan);
+      margin-bottom: 8px;
+    }
+
+    .detail-takeaways ul {
+      padding-left: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      font-size: 12.5px;
+      line-height: 1.48;
+      color: var(--text-secondary);
+    }
+
+    .detail-actions {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-bottom: 20px;
+    }
+
+    .action-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 7px;
+      height: 38px;
+      border-radius: 10px;
+      border: 1px solid var(--glass-border);
+      background: rgba(30, 41, 59, 0.65);
+      color: var(--text-primary);
+      font-size: 12.5px;
+      font-weight: 600;
+      font-family: inherit;
+      cursor: pointer;
+      text-decoration: none;
+      transition: all 0.18s ease;
+    }
+
+    .action-btn:hover {
+      border-color: var(--accent-cyan);
+      background: rgba(14, 165, 233, 0.18);
+    }
+
+    .action-btn.primary {
+      background: linear-gradient(135deg, #0284c7, #2563eb);
+      border-color: transparent;
+      color: #ffffff;
+    }
+
+    .action-btn.primary:hover {
+      filter: brightness(1.1);
+    }
+
+    .action-btn.saved {
+      border-color: var(--accent-amber);
+      background: rgba(245, 158, 11, 0.18);
+      color: #fde68a;
+    }
+
+    .regional-list-section {
+      border-top: 1px solid rgba(148, 163, 184, 0.15);
+      padding-top: 14px;
+    }
+
+    .regional-list-section h4 {
+      font-size: 11.5px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--text-muted);
+      margin-bottom: 10px;
+    }
+
+    .regional-mini-card {
+      padding: 10px 11px;
+      border-radius: 10px;
+      background: rgba(15, 23, 42, 0.56);
+      border: 1px solid rgba(148, 163, 184, 0.14);
+      margin-bottom: 8px;
+      cursor: pointer;
+      transition: border-color 0.18s ease, background 0.18s ease;
+    }
+
+    .regional-mini-card:hover {
+      border-color: var(--accent-cyan);
+      background: rgba(30, 41, 59, 0.72);
+    }
+
+    /* Bottom Telemetry & Quick-Jump Bar */
+    .bottom-hud {
+      position: fixed;
+      bottom: 16px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 16;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      background: var(--glass-bg);
+      backdrop-filter: blur(18px);
+      -webkit-backdrop-filter: blur(18px);
+      border: 1px solid var(--glass-border);
+      border-radius: 999px;
+      padding: 6px 14px;
+      box-shadow: var(--shadow-glass);
+      max-width: calc(100vw - 32px);
+    }
+
+    .hud-telemetry {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      color: var(--text-secondary);
+      white-space: nowrap;
+    }
+
+    .hud-divider {
+      width: 1px;
+      height: 16px;
+      background: rgba(148, 163, 184, 0.22);
+    }
+
+    .quick-cities {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      overflow-x: auto;
+      scrollbar-width: none;
+    }
+
+    .quick-cities::-webkit-scrollbar {
+      display: none;
+    }
+
+    .quick-city-btn {
+      background: rgba(30, 41, 59, 0.65);
+      border: 1px solid rgba(148, 163, 184, 0.18);
+      color: var(--text-secondary);
+      border-radius: 999px;
+      padding: 3px 9px;
+      font-size: 11px;
+      font-weight: 500;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: all 0.15s ease;
+    }
+
+    .quick-city-btn:hover {
+      border-color: var(--accent-cyan);
+      color: #fff;
+      background: rgba(14, 165, 233, 0.22);
+    }
+
+    /* Toast Notification */
+    .toast {
+      position: fixed;
+      bottom: 68px;
+      left: 50%;
+      transform: translateX(-50%) translateY(16px);
+      z-index: 80;
+      background: rgba(15, 23, 42, 0.94);
+      border: 1px solid rgba(56, 189, 248, 0.4);
+      color: #f8fafc;
+      padding: 8px 16px;
+      border-radius: 999px;
+      font-size: 12.5px;
+      font-weight: 500;
+      box-shadow: 0 12px 32px rgba(0, 0, 0, 0.55);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.22s ease, transform 0.22s ease;
+    }
+
+    .toast.show {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+    }
+
+    /* Full Dispatch Reader Modal */
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      z-index: 90;
+      background: rgba(2, 6, 23, 0.78);
+      backdrop-filter: blur(8px);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+
+    .modal-backdrop.open {
+      display: flex;
+    }
+
+    .modal-card {
+      width: 100%;
+      max-width: 640px;
+      max-height: 85vh;
+      overflow-y: auto;
+      background: #0b1222;
+      border: 1px solid rgba(148, 163, 184, 0.24);
+      border-radius: 18px;
+      padding: 24px;
+      box-shadow: 0 28px 72px rgba(0, 0, 0, 0.75);
+    }
+
+    /* Mobile Bottom Sheet Controls (Hidden on Desktop) */
+    .mobile-sheet-bar {
+      display: none;
+    }
+
+    .empty-state {
+      text-align: center;
+      padding: 32px 16px;
+      color: var(--text-muted);
+      font-size: 13px;
+      line-height: 1.5;
+    }
+
+    /* Responsive Mobile Layout */
+    @media (max-width: 900px) {
+      .top-command-bar {
+        top: 8px;
+        left: 10px;
+        right: 10px;
+        gap: 6px;
+      }
+
+      .header-row {
+        flex-wrap: wrap;
+        padding: 8px 10px;
+        gap: 8px;
+      }
+
+      .brand-text span {
+        display: none;
+      }
+
+      .search-wrapper {
+        order: 3;
+        flex: 1 0 100%;
+        max-width: none;
+      }
+
+      .pill-btn .btn-label-hide-sm {
+        display: none;
+      }
+
+      .maplibregl-ctrl-top-right {
+        top: 152px !important;
+        right: 10px !important;
+      }
+
+      body.detail-open .maplibregl-ctrl-top-right {
+        right: 10px !important;
+      }
+
+      .bottom-hud {
+        display: none;
+      }
+
+      .panel-collapse-fab {
+        display: none !important;
+      }
+
+      /* Mobile Unified Bottom Sheet for Left Panel */
+      .left-panel {
+        top: auto;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        width: 100%;
+        height: 44vh;
+        min-height: 54px;
+        max-height: 76vh;
+        border-radius: 20px 20px 0 0;
+        border-left: none;
+        border-right: none;
+        border-bottom: none;
+        transform: translateY(0);
+        transition: height var(--transition-ui), transform var(--transition-ui);
+      }
+
+      .left-panel.mobile-minimized {
+        height: 56px;
+      }
+
+      .left-panel.mobile-expanded {
+        height: 74vh;
+      }
+
+      .mobile-sheet-bar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 8px 16px 4px;
+        cursor: pointer;
+        user-select: none;
+      }
+
+      .sheet-handle {
+        width: 40px;
+        height: 4px;
+        border-radius: 999px;
+        background: rgba(148, 163, 184, 0.45);
+        margin: 0 auto;
+      }
+
+      /* Detail panel slides up over bottom sheet on mobile */
+      .detail-panel {
+        top: auto;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        width: 100%;
+        height: 72vh;
+        border-radius: 20px 20px 0 0;
+        border-left: none;
+        border-right: none;
+        border-bottom: none;
+        transform: translateY(105%);
+      }
+
+      body.detail-open .detail-panel {
+        transform: translateY(0);
+      }
+
+      .desktop-collapse-btn {
+        display: none;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div id="space-backdrop"></div>
+  <canvas id="starfield"></canvas>
+
+  <!-- 3D Interactive MapLibre Globe -->
+  <div id="map"></div>
+
+  <!-- Subtle Reticle at Center when Zoomed into Local Radar -->
+  <div id="center-reticle" aria-hidden="true">
+    <svg viewBox="0 0 36 36" fill="none">
+      <circle cx="18" cy="18" r="10" stroke="#38bdf8" stroke-width="1.2" stroke-dasharray="3 3" />
+      <circle cx="18" cy="18" r="2" fill="#38bdf8" />
+    </svg>
+  </div>
+
+  <!-- Top Floating Command Bar -->
+  <header class="top-command-bar">
+    <div class="header-row">
+      <div class="brand" role="button" tabindex="0" id="brand-reset" title="Reset to Global Earth View">
+        <div class="brand-orb">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10"></circle>
+            <path d="M2 12h20"></path>
+            <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path>
+          </svg>
+        </div>
+        <div class="brand-text">
+          <h1>TerraPulse</h1>
+          <span>Orbital News Explorer</span>
+        </div>
+      </div>
+
+      <div class="search-wrapper">
+        <div class="search-input-box">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="11" cy="11" r="8"></circle>
+            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+          </svg>
+          <input
+            type="text"
+            id="search-input"
+            placeholder="Search any city, country, topic, or headline..."
+            autocomplete="off"
+          />
+          <button class="clear-search-btn" id="clear-search" title="Clear search">&times;</button>
+        </div>
+        <div class="search-dropdown" id="search-dropdown"></div>
+      </div>
+
+      <div class="header-actions">
+        <button class="pill-btn active" id="btn-basemap" title="Toggle Satellite Hybrid / Vector Map">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"></polygon>
+            <line x1="8" y1="2" x2="8" y2="18"></line>
+            <line x1="16" y1="6" x2="16" y2="22"></line>
+          </svg>
+          <span class="btn-label-hide-sm" id="basemap-label">Satellite</span>
+        </button>
+
+        <button class="pill-btn" id="btn-orbit" title="Toggle Gentle Planetary Rotation">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21 12a9 9 0 1 1-6.219-8.56"></path>
+          </svg>
+          <span class="btn-label-hide-sm">Spin</span>
+        </button>
+
+        <button class="pill-btn" id="btn-saved-header" title="View Saved Stories">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path>
+          </svg>
+          <span class="btn-label-hide-sm">Saved</span>
+          <span class="saved-count-badge" id="saved-badge">0</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Category Filter Chips -->
+    <div class="category-bar" id="category-bar"></div>
+  </header>
+
+  <!-- Left Global / Local / Saved Feed Panel -->
+  <aside class="left-panel" id="left-panel">
+    <div class="mobile-sheet-bar" id="mobile-sheet-toggle">
+      <div style="width: 32px; font-size: 11px; color: var(--accent-cyan); font-weight: 600;" id="mobile-peek-zoom"></div>
+      <div class="sheet-handle"></div>
+      <div style="width: 32px; text-align: right; font-size: 11px; color: var(--text-muted);" id="mobile-sheet-chevron">▲</div>
+    </div>
+
+    <div class="panel-tabs-header">
+      <div class="tabs-group">
+        <button class="tab-btn active" data-tab="trending">Trending</button>
+        <button class="tab-btn" data-tab="local">Local Radar</button>
+        <button class="tab-btn" data-tab="saved">Saved (<span id="tab-saved-count">0</span>)</button>
+      </div>
+      <button class="icon-btn-sm desktop-collapse-btn" id="btn-collapse-left" title="Collapse Sidebar">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polyline points="15 18 9 12 15 6"></polyline>
+        </svg>
+      </button>
+    </div>
+
+    <div class="radar-status-strip" id="radar-status-strip">
+      <div class="radar-status-left">
+        <span class="live-pulse-dot" id="radar-dot"></span>
+        <span id="radar-status-text" style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--text-secondary);">
+          Global View • Zoom in (≥5.2x) for local feed
+        </span>
+      </div>
+      <span id="feed-count-pill" style="font-family:'JetBrains Mono', monospace; font-size:10.5px; color:#7dd3fc;"></span>
+    </div>
+
+    <div class="feed-scroll" id="feed-list"></div>
+  </aside>
+
+  <button class="panel-collapse-fab" id="btn-expand-left">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <polyline points="9 18 15 12 9 6"></polyline>
+    </svg>
+    <span>Stories</span>
+  </button>
+
+  <!-- Right Regional News Detail Panel -->
+  <aside class="detail-panel" id="detail-panel" aria-live="polite">
+    <div class="detail-header">
+      <div class="detail-location-block">
+        <div class="detail-location-title">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+            <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
+            <circle cx="12" cy="10" r="3"></circle>
+          </svg>
+          <span id="detail-location-name">Select a pin</span>
+        </div>
+        <div class="detail-coords" id="detail-coords">0.0000°, 0.0000°</div>
+      </div>
+      <div style="display:flex; gap:4px;">
+        <button class="icon-btn-sm" id="btn-fly-detail" title="Zoom Closer to Location" style="margin:0;">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="11" cy="11" r="8"></circle>
+            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+            <line x1="11" y1="8" x2="11" y2="14"></line>
+            <line x1="8" y1="11" x2="14" y2="11"></line>
+          </svg>
+        </button>
+        <button class="icon-btn-sm" id="btn-close-detail" title="Close Detail Panel" style="margin:0;">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+        </button>
+      </div>
+    </div>
+
+    <div class="detail-body" id="detail-body"></div>
+  </aside>
+
+  <!-- Bottom Telemetry & Quick Jump HUD -->
+  <div class="bottom-hud" id="bottom-hud">
+    <div class="hud-telemetry">
+      <span id="hud-coords">20.00° N, 18.00° E</span>
+      <span style="color: var(--text-muted);">•</span>
+      <span id="hud-zoom" style="color: var(--accent-cyan);">z1.9</span>
+    </div>
+    <div class="hud-divider"></div>
+    <div class="quick-cities" id="quick-cities"></div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <!-- Full Dispatch Modal -->
+  <div class="modal-backdrop" id="dispatch-modal">
+    <div class="modal-card">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
+        <span id="modal-badge" class="badge-cat"></span>
+        <button class="icon-btn-sm" id="btn-close-modal" style="margin:0;">&times;</button>
+      </div>
+      <h2 id="modal-title" style="font-family:'Space Grotesk', sans-serif; font-size:22px; line-height:1.3; margin-bottom:10px;"></h2>
+      <div id="modal-meta" style="font-size:12px; color:var(--text-muted); margin-bottom:16px;"></div>
+      <div id="modal-content" style="font-size:14.5px; line-height:1.7; color:var(--text-secondary); display:flex; flex-direction:column; gap:12px;"></div>
+      <div id="modal-footer" style="margin-top:20px; padding-top:14px; border-top:1px solid rgba(148,163,184,0.16); display:flex; justify-content:space-between; align-items:center;"></div>
+    </div>
+  </div>
+
+  <script type="module">
+    import * as maplibregl from 'https://unpkg.com/maplibre-gl@6.18.0/dist/maplibre-gl.mjs';
+
+    // =========================================================================
+    // 1. CATEGORIES & CURATED GLOBAL DATA (REAL COORDINATES)
+    // =========================================================================
+    const CATEGORIES = [
+      { id: 'all',     label: 'All Topics',     color: '#38bdf8' },
+      { id: 'world',   label: 'World',          color: '#3b82f6' },
+      { id: 'tech',    label: 'Tech & AI',      color: '#a855f7' },
+      { id: 'climate', label: 'Climate',        color: '#10b981' },
+      { id: 'economy', label: 'Economy',        color: '#f59e0b' },
+      { id: 'science', label: 'Science & Space',color: '#14b8a6' },
+      { id: 'culture', label: 'Culture',        color: '#ec4899' },
+      { id: 'health',  label: 'Health',         color: '#f43f5e' }
+    ];
+
+    const CATEGORY_MAP = Object.fromEntries(CATEGORIES.map(c => [c.id, c]));
+
+    const CITY_HUBS = [
+      { id: 'hub-nyc', name: 'New York', country: 'United States', lng: -74.0060, lat: 40.7128 },
+      { id: 'hub-sf',  name: 'San Francisco', country: 'United States', lng: -122.4194, lat: 37.7749 },
+      { id: 'hub-mex', name: 'Mexico City', country: 'Mexico', lng: -99.1332, lat: 19.4326 },
+      { id: 'hub-sao', name: 'São Paulo', country: 'Brazil', lng: -46.6333, lat: -23.5505 },
+      { id: 'hub-lon', name: 'London', country: 'United Kingdom', lng: -0.1276, lat: 51.5072 },
+      { id: 'hub-par', name: 'Paris', country: 'France', lng: 2.3522, lat: 48.8566 },
+      { id: 'hub-ber', name: 'Berlin', country: 'Germany', lng: 13.4050, lat: 52.5200 },
+      { id: 'hub-rey', name: 'Reykjavik', country: 'Iceland', lng: -21.9426, lat: 64.1466 },
+      { id: 'hub-cai', name: 'Cairo', country: 'Egypt', lng: 31.2357, lat: 30.0444 },
+      { id: 'hub-nai', name: 'Nairobi', country: 'Kenya', lng: 36.8219, lat: -1.2921 },
+      { id: 'hub-lag', name: 'Lagos', country: 'Nigeria', lng: 3.3792, lat: 6.5244 },
+      { id: 'hub-dxb', name: 'Dubai', country: 'UAE', lng: 55.2708, lat: 25.2048 },
+      { id: 'hub-del', name: 'New Delhi', country: 'India', lng: 77.2090, lat: 28.6139 },
+      { id: 'hub-bom', name: 'Mumbai', country: 'India', lng: 72.8777, lat: 19.0760 },
+      { id: 'hub-blr', name: 'Bengaluru', country: 'India', lng: 77.5946, lat: 12.9716 },
+      { id: 'hub-sin', name: 'Singapore', country: 'Singapore', lng: 103.8198, lat: 1.3521 },
+      { id: 'hub-tok', name: 'Tokyo', country: 'Japan', lng: 139.6917, lat: 35.6895 },
+      { id: 'hub-syd', name: 'Sydney', country: 'Australia', lng: 151.2093, lat: -33.8688 }
+    ];
+
+    const GAZETTEER = [
+      ...CITY_HUBS,
+      { name: 'Toronto', country: 'Canada', lng: -79.3832, lat: 43.6532 },
+      { name: 'Buenos Aires', country: 'Argentina', lng: -58.3816, lat: -34.6037 },
+      { name: 'Bogotá', country: 'Colombia', lng: -74.0721, lat: 4.7110 },
+      { name: 'Zurich', country: 'Switzerland', lng: 8.5417, lat: 47.3769 },
+      { name: 'Geneva', country: 'Switzerland', lng: 6.1432, lat: 46.2044 },
+      { name: 'Kyiv', country: 'Ukraine', lng: 30.5234, lat: 50.4501 },
+      { name: 'Istanbul', country: 'Turkey', lng: 28.9784, lat: 41.0082 },
+      { name: 'Cape Town', country: 'South Africa', lng: 18.4241, lat: -33.9249 },
+      { name: 'Marrakesh', country: 'Morocco', lng: -7.9811, lat: 31.6295 },
+      { name: 'Riyadh', country: 'Saudi Arabia', lng: 46.6753, lat: 24.7136 },
+      { name: 'Pune', country: 'India', lng: 73.8567, lat: 18.5204 },
+      { name: 'Hyderabad', country: 'India', lng: 78.4867, lat: 17.3850 },
+      { name: 'Chennai', country: 'India', lng: 80.2707, lat: 13.0827 },
+      { name: 'Bangkok', country: 'Thailand', lng: 100.5018, lat: 13.7563 },
+      { name: 'Jakarta', country: 'Indonesia', lng: 106.8456, lat: -6.2088 },
+      { name: 'Manila', country: 'Philippines', lng: 120.9842, lat: 14.5995 },
+      { name: 'Beijing', country: 'China', lng: 116.4074, lat: 39.9042 },
+      { name: 'Shanghai', country: 'China', lng: 121.4737, lat: 31.2304 },
+      { name: 'Taipei', country: 'Taiwan', lng: 121.5654, lat: 25.0330 },
+      { name: 'Seoul', country: 'South Korea', lng: 126.9780, lat: 37.5665 },
+      { name: 'Osaka', country: 'Japan', lng: 135.5023, lat: 34.6937 },
+      { name: 'Auckland', country: 'New Zealand', lng: 174.7633, lat: -36.8485 },
+      { name: 'Honolulu', country: 'United States', lng: -157.8583, lat: 21.3069 },
+      { name: 'Austin', country: 'United States', lng: -97.7431, lat: 30.2672 },
+      { name: 'Svalbard', country: 'Norway', lng: 15.6267, lat: 78.2232 },
+      { name: 'Atacama', country: 'Chile', lng: -67.7550, lat: -23.0290 }
+    ];
+
+    const CURATED_STORIES = [
+      {
+        id: 'st-nyc-1',
+        title: 'East Coast Offshore Wind Grid Reaches 4.2 GW Milestone Ahead of Winter Peak',
+        city: 'New York',
+        country: 'United States',
+        lng: -73.985,
+        lat: 40.708,
+        category: 'climate',
+        source: 'Atlantic Energy Wire',
+        publishedAt: '18m ago',
+        trendingScore: 96,
+        summary: 'Subsea high-voltage cables linking three Atlantic wind arrays now feed directly into Brooklyn and Long Island substations, cutting peak fossil dispatch by 19%.',
+        takeaways: [
+          'Dynamic grid batteries stabilize evening demand spikes across five boroughs.',
+          'Port terminals in Staten Island expand turbine assembly capacity for 2027.'
+        ],
+        fullText: 'Engineers along the New York Bight completed final synchronization tests on a 4.2-gigawatt offshore wind corridor early Monday, marking the largest clean-power integration in the Northeast grid’s history. Real-time telemetry from subsea converters shows steady load balancing even during sharp coastal gusts.'
+      },
+      {
+        id: 'st-nyc-2',
+        title: 'Treasury Tokenization Pilot Settles Cross-Border Repo Trades in Under 4 Seconds',
+        city: 'New York',
+        country: 'United States',
+        lng: -74.011,
+        lat: 40.706,
+        category: 'economy',
+        source: 'Manhattan Markets',
+        publishedAt: '1h ago',
+        trendingScore: 91,
+        summary: 'Major clearing banks report dramatic collateral efficiency gains during a multi-currency overnight liquidity trial anchored in Lower Manhattan.',
+        takeaways: [
+          'Instant atomic settlement lowers intraday counterparty exposure.',
+          'Regulators plan expanded sandbox rules for Q1 2027.'
+        ],
+        fullText: 'Financial institutions operating out of Wall Street’s clearing corridors concluded a two-week programmable settlement pilot that compressed multi-day cross-border treasury repo transactions into sub-four-second finality.'
+      },
+      {
+        id: 'st-sf-1',
+        title: 'Open-Weight Multimodal Robotics Models Cut Warehouse Calibration Time by 80%',
+        city: 'San Francisco',
+        country: 'United States',
+        lng: -122.411,
+        lat: 37.781,
+        category: 'tech',
+        source: 'Bay Compute Dispatch',
+        publishedAt: '32m ago',
+        trendingScore: 98,
+        summary: 'Bay Area labs release compact spatial-reasoning weights that run locally on edge robot controllers without cloud round-trips.',
+        takeaways: [
+          'Sub-12ms vision-to-torque inference on low-wattage onboard chips.',
+          'Over 140 logistics facilities begin field trials across North America.'
+        ],
+        fullText: 'Researchers in San Francisco unveiled a new family of open-weight embodied AI models designed specifically for dexterous industrial manipulation, eliminating reliance on continuous cloud connectivity.'
+      },
+      {
+        id: 'st-aus-1',
+        title: 'Orbital Manufacturing Startup Tests Zero-G Fiber Optics Above West Texas',
+        city: 'Austin',
+        country: 'United States',
+        lng: -97.743,
+        lat: 30.267,
+        category: 'science',
+        source: 'Southwind Space',
+        publishedAt: '3h ago',
+        trendingScore: 84,
+        summary: 'Austin propulsion engineers recover an autonomous reentry capsule carrying ultra-pure ZBLAN optical fibers spun in microgravity.',
+        takeaways: [
+          'Microgravity crystallization eliminates microscopic signal-scattering defects.',
+          'Next launch window targets 12x payload volume.'
+        ],
+        fullText: 'An Austin-based aerospace team successfully recovered its third orbital manufacturing capsule, confirming that microgravity-drawn optical fibers achieve signal attenuation far lower than terrestrial silica.'
+      },
+      {
+        id: 'st-tor-1',
+        title: 'Great Lakes Freshwater Sensor Mesh Tracks Micro-Thermal Shifts in Real Time',
+        city: 'Toronto',
+        country: 'Canada',
+        lng: -79.383,
+        lat: 43.653,
+        category: 'climate',
+        source: 'Northern Ledger',
+        publishedAt: '2h ago',
+        trendingScore: 79,
+        summary: 'University consortium deploys 300 autonomous acoustic buoys across Lake Ontario to forecast winter ice formation and municipal water quality.',
+        takeaways: [
+          'Solar-powered buoys transmit hourly depth profiles.',
+          'Open dataset integrated into municipal flood warning systems.'
+        ],
+        fullText: 'A joint Canadian-U.S. hydrology network has activated hundreds of smart buoys along Lake Ontario’s shoreline, providing unprecedented clarity on late-autumn thermal overturn.'
+      },
+      {
+        id: 'st-mex-1',
+        title: 'Mexico City Expands Electric Cablebus Network to Cut Valley Commutes in Half',
+        city: 'Mexico City',
+        country: 'Mexico',
+        lng: -99.133,
+        lat: 19.433,
+        category: 'world',
+        source: 'Reforma Urbana',
+        publishedAt: '1h ago',
+        trendingScore: 87,
+        summary: 'Two new elevated aerial transit corridors open across hillside districts, linking 280,000 daily riders directly to metro hubs.',
+        takeaways: [
+          'Zero-emission electric gondolas reduce hillside bus congestion.',
+          'Solar canopies on 14 stations supply auxiliary lighting.'
+        ],
+        fullText: 'Commuters in outer boroughs of Mexico City gained high-capacity aerial transit links this week as the city’s fourth Cablebus line entered full commercial operation.'
+      },
+      {
+        id: 'st-bog-1',
+        title: 'Andean Cloud-Forest Corridor Earns Digital Bio-Credit Backing in Bogotá',
+        city: 'Bogotá',
+        country: 'Colombia',
+        lng: -74.072,
+        lat: 4.711,
+        category: 'climate',
+        source: 'Andes Monitor',
+        publishedAt: '4h ago',
+        trendingScore: 77,
+        summary: 'Satellite Lidar verification unlocks long-term conservation funding for 90,000 hectares of high-altitude páramo watershed.',
+        takeaways: [
+          'Safeguards drinking water supply for more than 8 million residents.',
+          'Local indigenous stewards manage biodiversity monitoring.'
+        ],
+        fullText: 'Environmental authorities in Bogotá finalized a high-integrity biodiversity credit framework backed by continuous satellite radar and ground acoustic sensors.'
+      },
+      {
+        id: 'st-sao-1',
+        title: 'Brazil’s Bio-Aviation Fuel Hub Scales Sugarcane-to-Jet Output in São Paulo',
+        city: 'São Paulo',
+        country: 'Brazil',
+        lng: -46.633,
+        lat: -23.551,
+        category: 'economy',
+        source: 'Folha Econômica',
+        publishedAt: '52m ago',
+        trendingScore: 89,
+        summary: 'New catalytic biorefineries convert agricultural ethanol into certified sustainable aviation fuel for South American trunk routes.',
+        takeaways: [
+          'Lifecycle emissions drop by up to 74% versus conventional Jet-A1.',
+          'Exports scheduled for European hubs starting early next year.'
+        ],
+        fullText: 'Industrial energy firms across São Paulo state commissioned two commercial alcohol-to-jet units capable of supplying regional airlines with drop-in renewable fuel.'
+      },
+      {
+        id: 'st-ata-1',
+        title: 'Atacama Extremely Large Telescope Installs Adaptive Laser Guide Array',
+        city: 'Atacama',
+        country: 'Chile',
+        lng: -67.755,
+        lat: -23.029,
+        category: 'science',
+        source: 'Cosmos South',
+        publishedAt: '3h ago',
+        trendingScore: 93,
+        summary: 'High-altitude astronomers calibrate four sodium-laser beacons to cancel atmospheric shimmer during exoplanet atmosphere scans.',
+        takeaways: [
+          'Enables direct spectroscopy of Earth-sized worlds around nearby stars.',
+          'Dry desert skies deliver over 320 clear nights annually.'
+        ],
+        fullText: 'At 3,000 meters above the Atacama Desert, optical engineers successfully locked multiple adaptive-optics laser guide stars, bringing next-generation exoplanet imaging closer to first light.'
+      },
+      {
+        id: 'st-bue-1',
+        title: 'Southern Ocean Acoustic Observatory Maps Fin Whale Recovery Routes',
+        city: 'Buenos Aires',
+        country: 'Argentina',
+        lng: -58.382,
+        lat: -34.604,
+        category: 'science',
+        source: 'Patagonia Science',
+        publishedAt: '5h ago',
+        trendingScore: 76,
+        summary: 'Marine biologists report surging South Atlantic whale aggregations using automated hydrophone arrays.',
+        takeaways: [
+          'Shipping lanes adjust speed advisories during peak migration.',
+          'AI acoustic classifiers identify individual pod dialects.'
+        ],
+        fullText: 'Data compiled in Buenos Aires from deep-water hydrophones along the Patagonian shelf reveals the strongest seasonal return of fin whales documented in five decades.'
+      },
+      {
+        id: 'st-lon-1',
+        title: 'London Underground Heat-Recovery Network Powers 6,000 Homes Ahead of Frost',
+        city: 'London',
+        country: 'United Kingdom',
+        lng: -0.128,
+        lat: 51.507,
+        category: 'climate',
+        source: 'Thames Chronicle',
+        publishedAt: '24m ago',
+        trendingScore: 92,
+        summary: 'Waste thermal energy captured from deep-level Tube ventilation shafts now feeds district heating pipes in Islington and Camden.',
+        takeaways: [
+          'Lowers winter heating bills for social housing estates by 28%.',
+          'Second phase taps Northern Line shafts by mid-2027.'
+        ],
+        fullText: 'Transport and energy engineers in London switched on an expanded Bunhill heat-capture loop, turning subterranean train braking warmth into clean municipal hot water.'
+      },
+      {
+        id: 'st-lon-2',
+        title: 'UK Biobank Releases Whole-Cell Proteomic Atlas for Early Neuro-Diagnostics',
+        city: 'London',
+        country: 'United Kingdom',
+        lng: -0.142,
+        lat: 51.519,
+        category: 'health',
+        source: 'Lancet Brief',
+        publishedAt: '2h ago',
+        trendingScore: 88,
+        summary: 'Open-access dataset maps 5,400 blood biomarkers across 100,000 volunteers, accelerating blood-test screening for Alzheimer’s.',
+        takeaways: [
+          'Detects protein misfolding signatures up to a decade before symptoms.',
+          'Available globally to accredited university medical teams.'
+        ],
+        fullText: 'Clinicians in London announced the completion of a landmark proteomic dataset that promises non-invasive annual screening for neurodegenerative risk.'
+      },
+      {
+        id: 'st-par-1',
+        title: 'Paris Converts 180 Kilometers of Seine-Side Arteries Into Sponge Boulevards',
+        city: 'Paris',
+        country: 'France',
+        lng: 2.352,
+        lat: 48.857,
+        category: 'culture',
+        source: 'Le Courrier Urbain',
+        publishedAt: '1h ago',
+        trendingScore: 86,
+        summary: 'Permeable limestone paving and sunken rain gardens transform former multi-lane avenues into shaded cultural promenades.',
+        takeaways: [
+          'Absorbs extreme storm runoff before it reaches sewer overflows.',
+          'Outdoor museum installations line newly pedestrianized quays.'
+        ],
+        fullText: 'Urban planners in Paris unveiled the latest stretch of permeable green corridors linking cultural districts along the Seine, blending flood resilience with public art.'
+      },
+      {
+        id: 'st-ber-1',
+        title: 'Germany’s Hydrogen-Ready Steel Furnaces Begin Commercial Low-Carbon Runs',
+        city: 'Berlin',
+        country: 'Germany',
+        lng: 13.405,
+        lat: 52.520,
+        category: 'economy',
+        source: 'Rheinische Wirtschaft',
+        publishedAt: '44m ago',
+        trendingScore: 88,
+        summary: 'European automakers lock in long-term green steel supply contracts as direct-reduction plants scale up across northern corridors.',
+        takeaways: [
+          'Cuts embedded vehicle-frame carbon footprint by 65%.',
+          'Backed by cross-border North Sea electrolyzer pipelines.'
+        ],
+        fullText: 'Industrial policy leaders in Berlin hailed the first commercial deliveries of hydrogen-reduced structural steel to European EV assembly lines.'
+      },
+      {
+        id: 'st-zur-1',
+        title: 'ETH Zurich Unveils Room-Temperature Quantum Repeater Node Over Telecom Fiber',
+        city: 'Zurich',
+        country: 'Switzerland',
+        lng: 8.542,
+        lat: 47.377,
+        category: 'tech',
+        source: 'Alpine Tech Review',
+        publishedAt: '3h ago',
+        trendingScore: 90,
+        summary: 'Entangled photon memory modules operate over standard dark fiber between Zurich and Basel without cryogenic cooling.',
+        takeaways: [
+          'Eliminates bulky liquid-helium infrastructure at relay stations.',
+          'Unlocks tamper-evident banking and diplomatic links.'
+        ],
+        fullText: 'Physicists in Zurich demonstrated a solid-state quantum repeater that preserves photon entanglement across 95 kilometers of existing commercial fiber.'
+      },
+      {
+        id: 'st-gen-1',
+        title: 'WHO & Global Coalition Fast-Track Heat-Stable mRNA Vaccine Cold-Chain Standard',
+        city: 'Geneva',
+        country: 'Switzerland',
+        lng: 6.143,
+        lat: 46.204,
+        category: 'health',
+        source: 'Geneva Health Wire',
+        publishedAt: '2h ago',
+        trendingScore: 85,
+        summary: 'Lyophilized lipid formulations remain potent for 6 months at standard clinic refrigerator temperatures, aiding rural clinics.',
+        takeaways: [
+          'Removes ultra-cold -80°C freezer bottleneck in remote regions.',
+          'Adopted by 42 national immunization ministries.'
+        ],
+        fullText: 'Public health delegates in Geneva approved updated stability guidelines for freeze-dried mRNA vaccines, dramatically lowering logistics costs across tropical health networks.'
+      },
+      {
+        id: 'st-rey-1',
+        title: 'Iceland Drills First Supercritical Magma-Zone Geothermal Well Near Krafla',
+        city: 'Reykjavik',
+        country: 'Iceland',
+        lng: -21.943,
+        lat: 64.147,
+        category: 'science',
+        source: 'Nordic Earth Dispatch',
+        publishedAt: '1h ago',
+        trendingScore: 94,
+        summary: 'Engineers tap 450°C supercritical steam pockets capable of generating ten times the output of conventional geothermal wells.',
+        takeaways: [
+          'Ceramic-coated casings withstand corrosive volcanic brines.',
+          'Could power clean direct-air carbon capture plants year-round.'
+        ],
+        fullText: 'Icelandic geoscientists confirmed stable pressure readings from a deep magma-adjacent borehole, opening a new frontier for ultra-dense baseload clean energy.'
+      },
+      {
+        id: 'st-sva-1',
+        title: 'Svalbard Seed Vault Receives 14,000 Drought-Resilient Millet & Pulse Accessions',
+        city: 'Svalbard',
+        country: 'Norway',
+        lng: 15.627,
+        lat: 78.223,
+        category: 'climate',
+        source: 'Arctic Observer',
+        publishedAt: '4h ago',
+        trendingScore: 83,
+        summary: 'Agricultural institutes from South Asia and East Africa deposit rare heirloom varieties inside the permafrost mountain chamber.',
+        takeaways: [
+          'Preserves heat-tolerant genetics for future food security.',
+          'Total vault collection surpasses 1.35 million seed samples.'
+        ],
+        fullText: 'Under polar twilight at 78° North, international seed banks sealed new shipments of climate-hardy legumes and ancient grains inside Svalbard’s reinforced permafrost vaults.'
+      },
+      {
+        id: 'st-kyi-1',
+        title: 'Modular Solar Microgrids Keep Regional Hospitals Online Across Ukraine',
+        city: 'Kyiv',
+        country: 'Ukraine',
+        lng: 30.523,
+        lat: 50.450,
+        category: 'world',
+        source: 'Kyiv Civic Dispatch',
+        publishedAt: '48m ago',
+        trendingScore: 91,
+        summary: 'Decentralized rooftop solar and LFP battery bunkers now shield 85 municipal clinics and water pumping stations from grid outages.',
+        takeaways: [
+          'Automated islanding switches kick in within 20 milliseconds.',
+          'Community technicians trained across 14 oblasts.'
+        ],
+        fullText: 'Municipal energy teams in Kyiv reported that decentralized battery-backed solar microgrids delivered uninterrupted surgical power across dozens of regional hospitals.'
+      },
+      {
+        id: 'st-ist-1',
+        title: 'Bosphorus Digital Twin Predicts Maritime Currents for Safer Tanker Transit',
+        city: 'Istanbul',
+        country: 'Turkey',
+        lng: 28.978,
+        lat: 41.008,
+        category: 'world',
+        source: 'Anatolia Maritime',
+        publishedAt: '2h ago',
+        trendingScore: 80,
+        summary: 'Radar-linked strait modeling gives pilots minute-by-minute subsurface eddy alerts through one of Earth’s narrowest trade chokepoints.',
+        takeaways: [
+          'Reduces vessel transit delays by 22% during autumn squalls.',
+          'Integrates Black Sea wind-surge telemetry.'
+        ],
+        fullText: 'Vessel traffic controllers in Istanbul deployed a real-time hydrodynamic digital twin of the Bosphorus Strait to guide grain and container carriers safely.'
+      },
+      {
+        id: 'st-cai-1',
+        title: 'Grand Egyptian Museum Opens AI-Guided Papyrus & Textile Restoration Wing',
+        city: 'Cairo',
+        country: 'Egypt',
+        lng: 31.236,
+        lat: 30.044,
+        category: 'culture',
+        source: 'Nile Cultural Review',
+        publishedAt: '1h ago',
+        trendingScore: 85,
+        summary: 'Multispectral X-ray scanning reads rolled ancient manuscripts without physically unsealing fragile fibers.',
+        takeaways: [
+          'Virtual ink-reconstruction reveals previously illegible Middle Kingdom texts.',
+          'Public conservation gallery lets visitors watch live scans.'
+        ],
+        fullText: 'Conservators in Giza and Cairo unveiled a dedicated imaging laboratory using non-invasive synchrotron-inspired scanners to decipher sealed archaeological scrolls.'
+      },
+      {
+        id: 'st-mar-1',
+        title: 'Atlas Mountain Solar-Desalination Corridor Expands Drip Irrigation Network',
+        city: 'Marrakesh',
+        country: 'Morocco',
+        lng: -7.981,
+        lat: 31.629,
+        category: 'climate',
+        source: 'Maghreb Horizon',
+        publishedAt: '5h ago',
+        trendingScore: 78,
+        summary: 'Concentrated solar plants along Morocco’s coast pump desalinated water inland to stabilize olive and citrus cooperatives.',
+        takeaways: [
+          'Smart soil-moisture sensors cut farm water draw by 40%.',
+          'Brine-recovery units extract industrial magnesium.'
+        ],
+        fullText: 'Agronomists near Marrakesh documented strong harvest rebounds after linking high-efficiency drip irrigation to coastal solar desalination pipelines.'
+      },
+      {
+        id: 'st-lag-1',
+        title: 'Lagos Fintech Clearinghouse Launches Instant Pan-African Cross-Currency Rails',
+        city: 'Lagos',
+        country: 'Nigeria',
+        lng: 3.379,
+        lat: 6.524,
+        category: 'economy',
+        source: 'West Africa Business',
+        publishedAt: '39m ago',
+        trendingScore: 90,
+        summary: 'Small exporters settle invoices directly between Naira, Cedi, and Shilling without routing through intermediary dollar correspondent banks.',
+        takeaways: [
+          'Cuts cross-border SME transfer fees from 6.5% to under 0.9%.',
+          'Over 1.4 million merchant wallets connected at launch.'
+        ],
+        fullText: 'A Lagos-headquartered payments consortium activated direct local-currency settlement corridors linking West and East African commercial hubs.'
+      },
+      {
+        id: 'st-nai-1',
+        title: 'Nairobi Green Data Center Runs 100% on Rift Valley Geothermal Power',
+        city: 'Nairobi',
+        country: 'Kenya',
+        lng: 36.822,
+        lat: -1.292,
+        category: 'tech',
+        source: 'East Africa Tech',
+        publishedAt: '27m ago',
+        trendingScore: 93,
+        summary: 'Hyperscale compute facility taps Olkaria geothermal steam and high-altitude cooling air to train Swahili and African language AI models.',
+        takeaways: [
+          'Power usage effectiveness (PUE) hits 1.12 without freshwater waste.',
+          'Provides subsidized GPU clusters to Kenyan universities.'
+        ],
+        fullText: 'Tech founders in Nairobi celebrated the commissioning of East Africa’s largest geothermal-powered AI compute campus, keeping regional data sovereignty local.'
+      },
+      {
+        id: 'st-cap-1',
+        title: 'Cape Town Marine Lab Tracks Kelp Forest Carbon Capture With Underwater Drones',
+        city: 'Cape Town',
+        country: 'South Africa',
+        lng: 18.424,
+        lat: -33.925,
+        category: 'climate',
+        source: 'Southern Tide',
+        publishedAt: '4h ago',
+        trendingScore: 79,
+        summary: 'Autonomous benthic gliders map the Great African Seaforest’s nutrient cycles and biodiversity along the Cape Peninsula.',
+        takeaways: [
+          'Cold Benguela upwelling sustains rapid giant kelp growth.',
+          'Supports artisanal sustainable abalone and line-fisheries.'
+        ],
+        fullText: 'Oceanographers in Cape Town released high-resolution 3D sonar maps of the region’s towering kelp ecosystems, quantifying their coastal storm-buffering role.'
+      },
+      {
+        id: 'st-dxb-1',
+        title: 'Dubai Autonomous Drone Air-Freight Corridor Links Jebel Ali Port to Logistics City',
+        city: 'Dubai',
+        country: 'UAE',
+        lng: 55.271,
+        lat: 25.205,
+        category: 'tech',
+        source: 'Gulf Innovation',
+        publishedAt: '55m ago',
+        trendingScore: 87,
+        summary: 'Heavy-lift eVTOL cargo drones shuttle urgent medical and semiconductor shipments above desert highways in 14 minutes.',
+        takeaways: [
+          'Automated sky-traffic corridor deconflicts with commercial aviation.',
+          'Reduces port-to-warehouse customs turnaround by 60%.'
+        ],
+        fullText: 'Aviation regulators in Dubai cleared commercial medium-payload cargo drone flights along a dedicated 35-kilometer port-to-airport skyway.'
+      },
+      {
+        id: 'st-riy-1',
+        title: 'Red Sea Coral Cryobank Preserves Heat-Resilient Reef Genomes in Riyadh & Thuwal',
+        city: 'Riyadh',
+        country: 'Saudi Arabia',
+        lng: 46.675,
+        lat: 24.714,
+        category: 'science',
+        source: 'Arabian Science',
+        publishedAt: '3h ago',
+        trendingScore: 81,
+        summary: 'Marine geneticists archive naturally warm-adapted Red Sea coral larvae to seed global reef restoration nurseries.',
+        takeaways: [
+          'Red Sea corals survive temperatures 3°C warmer than Pacific reefs.',
+          'Open genetic library shared with Indian Ocean conservation teams.'
+        ],
+        fullText: 'Biologists collaborating between Riyadh and coastal Red Sea labs unveiled a cryogenic coral archive housing over 180 thermal-tolerant species.'
+      },
+      {
+        id: 'st-del-1',
+        title: 'Delhi-NCR Deploys Hyperlocal Satellite + IoT Air-Quality Forecasting Grid',
+        city: 'New Delhi',
+        country: 'India',
+        lng: 77.209,
+        lat: 28.614,
+        category: 'health',
+        source: 'Capital Civic Wire',
+        publishedAt: '19m ago',
+        trendingScore: 95,
+        summary: '72-hour ward-level PM2.5 forecasts combine geostationary aerosol tracking with 1,200 street sensors to trigger targeted dust & transit measures.',
+        takeaways: [
+          'Public schools and transit authorities receive automated morning alerts.',
+          'Identifies localized biomass burning hotspots within 30 minutes.'
+        ],
+        fullText: 'Atmospheric scientists in New Delhi rolled out an ultra-dense urban air intelligence system that pinpoints pollution plumes down to individual neighborhoods.'
+      },
+      {
+        id: 'st-del-2',
+        title: 'India’s Unified Logistics Interface Cuts Highway Freight Turnaround by 31%',
+        city: 'New Delhi',
+        country: 'India',
+        lng: 77.230,
+        lat: 28.630,
+        category: 'economy',
+        source: 'Bharat Trade Journal',
+        publishedAt: '2h ago',
+        trendingScore: 86,
+        summary: 'Open digital APIs link rail freight, FASTag tolls, and port customs into a single real-time manifest for exporters.',
+        takeaways: [
+          'Over 1,100 logistics startups build route-optimization tools on the stack.',
+          'Dedicated electric freight corridors expand along Delhi–Mumbai axis.'
+        ],
+        fullText: 'Trade officials in New Delhi reported sharp gains in national supply-chain velocity after integrating port customs with interstate rail and highway telemetry.'
+      },
+      {
+        id: 'st-bom-1',
+        title: 'Mumbai Coastal Road & Aqua Line Metro Reshape Western Suburb Commutes',
+        city: 'Mumbai',
+        country: 'India',
+        lng: 72.878,
+        lat: 19.076,
+        category: 'world',
+        source: 'Western Harbour Post',
+        publishedAt: '41m ago',
+        trendingScore: 91,
+        summary: 'Full underground north-south metro integration eases pressure on suburban rail lines while seaside promenades open to pedestrians.',
+        takeaways: [
+          'Bandra-to-Colaba transit time drops below 28 minutes during rush hour.',
+          'Regenerative braking feeds power back into station cooling systems.'
+        ],
+        fullText: 'Commuters across Mumbai experienced significantly faster north-south travel following full synchronization of the underground Aqua Line corridor with harbor feeders.'
+      },
+      {
+        id: 'st-blr-1',
+        title: 'Bengaluru Space-Tech Cluster Tests Reusable Cryogenic Methane Engine',
+        city: 'Bengaluru',
+        country: 'India',
+        lng: 77.595,
+        lat: 12.972,
+        category: 'science',
+        source: 'Deccan Aerospace',
+        publishedAt: '35m ago',
+        trendingScore: 94,
+        summary: 'Private launch startup completes a 120-second hot-fire test of a 3D-printed methalox booster engine slated for 2027 orbital flight.',
+        takeaways: [
+          'Single-piece Inconel combustion chamber cuts assembly parts by 70%.',
+          'Supports small-satellite constellation launches for Asian Earth-observation.'
+        ],
+        fullText: 'Aerospace engineers in Bengaluru celebrated a full-duration hot-fire milestone for India’s newest private liquid-methane rocket engine.'
+      },
+      {
+        id: 'st-hyd-1',
+        title: 'Hyderabad Genome Valley Launches Point-of-Care Dengue & Chikungunya Biochip',
+        city: 'Hyderabad',
+        country: 'India',
+        lng: 78.487,
+        lat: 17.385,
+        category: 'health',
+        source: 'Deccan MedTech',
+        publishedAt: '3h ago',
+        trendingScore: 84,
+        summary: 'Palm-sized microfluidic cartridge differentiates five monsoon-season viral fevers in 11 minutes from a single finger-prick.',
+        takeaways: [
+          'Costs under $2 per test for rural primary health centers.',
+          'Syncs anonymized outbreak maps to state epidemiology dashboards.'
+        ],
+        fullText: 'Biotech researchers in Hyderabad received regulatory clearance for a low-cost multiplex diagnostic biochip built for monsoon fever triage.'
+      },
+      {
+        id: 'st-sin-1',
+        title: 'Singapore Port Automates Electric Vessel Charging With Underwater Robotic Arms',
+        city: 'Singapore',
+        country: 'Singapore',
+        lng: 103.820,
+        lat: 1.352,
+        category: 'economy',
+        source: 'Straits Maritime',
+        publishedAt: '29m ago',
+        trendingScore: 90,
+        summary: 'Tuas Mega Port activates high-megawatt shore-power berths for electric harbor tugs and regional feeder container ships.',
+        takeaways: [
+          'Automated crane-and-plug telemetry trims berth turnaround emissions by 45%.',
+          'Solar canopies across terminal rooftops generate 60 MWp.'
+        ],
+        fullText: 'Maritime authorities in Singapore demonstrated hands-free megawatt charging for electric harbor craft at Tuas Port as regional shipping decarbonizes.'
+      },
+      {
+        id: 'st-ban-1',
+        title: 'Bangkok Urban Canal Revamp Adds Flood-Sponge Parks Across 14 Districts',
+        city: 'Bangkok',
+        country: 'Thailand',
+        lng: 100.502,
+        lat: 13.756,
+        category: 'climate',
+        source: 'Chao Phraya Post',
+        publishedAt: '2h ago',
+        trendingScore: 81,
+        summary: 'Rehabilitated khlong waterways and sunken retention lawns absorb monsoon cloudbursts while creating shaded bike paths.',
+        takeaways: [
+          'Bio-filtration wetlands improve canal dissolved oxygen levels.',
+          'Connects floating markets directly to Skytrain stations.'
+        ],
+        fullText: 'Bangkok civic engineers opened three new retention parklands woven into historic canal networks to buffer seasonal tidal surges.'
+      },
+      {
+        id: 'st-jak-1',
+        title: 'Indonesia High-Speed Rail Corridor Sparks Clean Transit Boom Across Java',
+        city: 'Jakarta',
+        country: 'Indonesia',
+        lng: 106.846,
+        lat: -6.209,
+        category: 'world',
+        source: 'Archipelago Times',
+        publishedAt: '3h ago',
+        trendingScore: 83,
+        summary: 'Electric feeder buses and transit-oriented housing surge around Jakarta–Bandung stations as daily ridership hits record highs.',
+        takeaways: [
+          'Cuts intercity corridor travel time from 3.5 hours to 45 minutes.',
+          'Plans advance for eastward extension toward Surabaya.'
+        ],
+        fullText: 'Transport analysts in Jakarta note rapid commuter mode shifts away from toll highways as high-speed rail frequency increases.'
+      },
+      {
+        id: 'st-bei-1',
+        title: 'Beijing & North China Grid Link Vast Gobi Desert Wind-Solar Bases via UHVDC',
+        city: 'Beijing',
+        country: 'China',
+        lng: 116.407,
+        lat: 39.904,
+        category: 'climate',
+        source: 'Northern Grid Monitor',
+        publishedAt: '1h ago',
+        trendingScore: 89,
+        summary: 'Ultra-high-voltage DC transmission lines carry gigawatts of desert renewable electricity over 1,800 km to eastern industrial hubs.',
+        takeaways: [
+          'Line-loss stays below 4% across continental distances.',
+          'Pumped-hydro reservoirs in Hebei absorb midday solar surpluses.'
+        ],
+        fullText: 'Power grid operators in Beijing energized a new UHVDC converter station tying arid western solar parks directly into northern metropolitan grids.'
+      },
+      {
+        id: 'st-sha-1',
+        title: 'Shanghai Shipyard Launches World’s Largest Dual-Fuel Green Methanol Carrier',
+        city: 'Shanghai',
+        country: 'China',
+        lng: 121.474,
+        lat: 31.230,
+        category: 'economy',
+        source: 'Yangtze Trade Wire',
+        publishedAt: '2h ago',
+        trendingScore: 85,
+        summary: '16,000-TEU container vessel completes sea trials, paving the way for low-sulfur trans-Pacific freight corridors.',
+        takeaways: [
+          'Smart hull air-lubrication reduces hydrodynamic drag by 7%.',
+          'Green methanol bunkering hubs expand in Shanghai and Singapore.'
+        ],
+        fullText: 'Naval architects in Shanghai handed over a flagship methanol-capable mega-container ship built to meet strict 2030 maritime carbon intensity targets.'
+      },
+      {
+        id: 'st-seo-1',
+        title: 'Seoul Unveils High-Bandwidth Memory Packaging Breakthrough for Edge AI Chips',
+        city: 'Seoul',
+        country: 'South Korea',
+        lng: 126.978,
+        lat: 37.567,
+        category: 'tech',
+        source: 'Han Semiconductor Daily',
+        publishedAt: '22m ago',
+        trendingScore: 95,
+        summary: 'Hybrid copper-bonding stacks 16 memory dies vertically with 35% lower thermal resistance for next-gen data centers and laptops.',
+        takeaways: [
+          'Doubles memory bandwidth while trimming cooling water consumption.',
+          'Volume production ramps in Pyeongtaek and Yongin fabs.'
+        ],
+        fullText: 'Semiconductor engineers in Seoul detailed a hybrid-bonding memory architecture that solves thermal bottlenecks in dense AI accelerators.'
+      },
+      {
+        id: 'st-tok-1',
+        title: 'Tokyo Solid-State Battery Consortium Hits 1,200-Cycle Fast-Charge Benchmark',
+        city: 'Tokyo',
+        country: 'Japan',
+        lng: 139.692,
+        lat: 35.690,
+        category: 'tech',
+        source: 'Nikkei Frontier',
+        publishedAt: '15m ago',
+        trendingScore: 97,
+        summary: 'Sulfide ceramic electrolyte cells charge from 10% to 80% in 9 minutes without dendrite degradation across extreme cold tests.',
+        takeaways: [
+          'Non-flammable solid electrolyte improves cabin safety margins.',
+          'Pilot automotive packs enter fleet validation in Aichi and Tokyo.'
+        ],
+        fullText: 'Battery scientists in Tokyo announced a major durability milestone for solid-state EV cells, demonstrating over 1,200 rapid-charge cycles with minimal capacity fade.'
+      },
+      {
+        id: 'st-tok-2',
+        title: 'Digital Noh & Interactive Projection Art Transforms Ueno Night Museums',
+        city: 'Tokyo',
+        country: 'Japan',
+        lng: 139.774,
+        lat: 35.714,
+        category: 'culture',
+        source: 'Kanto Arts Ledger',
+        publishedAt: '3h ago',
+        trendingScore: 82,
+        summary: 'Traditional Noh theater masters collaborate with spatial-audio designers to stage late-evening cultural performances.',
+        takeaways: [
+          'Real-time motion capture weaves classical choreography with live ink visuals.',
+          'Attracts record international youth attendance.'
+        ],
+        fullText: 'Cultural institutions across Tokyo’s Ueno Park opened a nocturnal arts season pairing 600-year-old classical stagecraft with reactive projection mapping.'
+      },
+      {
+        id: 'st-syd-1',
+        title: 'Sydney’s Virtual Power Plant Links 95,000 Rooftop Batteries Into One Grid Buffer',
+        city: 'Sydney',
+        country: 'Australia',
+        lng: 151.209,
+        lat: -33.869,
+        category: 'climate',
+        source: 'Pacific Energy Post',
+        publishedAt: '31m ago',
+        trendingScore: 92,
+        summary: 'Suburban home batteries automatically dispatch millisecond frequency support across New South Wales during evening demand peaks.',
+        takeaways: [
+          'Participating households earn annual grid-stabilization credits.',
+          'Prevents costly gas peaker startups on hot spring evenings.'
+        ],
+        fullText: 'Energy market operators in Sydney credited a city-wide virtual power plant for absorbing sudden transmission swings without a single brownout.'
+      },
+      {
+        id: 'st-auc-1',
+        title: 'Auckland Researchers Decode Southern Hemisphere Atmospheric River Shifts',
+        city: 'Auckland',
+        country: 'New Zealand',
+        lng: 174.763,
+        lat: -36.849,
+        category: 'science',
+        source: 'Tasman Climate Lab',
+        publishedAt: '4h ago',
+        trendingScore: 78,
+        summary: 'AI ensemble weather models give Tasman coastal towns five extra days of lead time ahead of intense subtropical moisture plumes.',
+        takeaways: [
+          'Integrates drifting Argo ocean float heat-content readings.',
+          'Open warning API shared with Pacific Island meteorological services.'
+        ],
+        fullText: 'Meteorologists in Auckland published a high-skill forecasting model tailored for Tasman Sea atmospheric rivers, sharply improving flood preparedness.'
+      }
+    ];
+
+    // =========================================================================
+    // 2. APPLICATION STATE
+    // =========================================================================
+    const LOCAL_ZOOM_THRESHOLD = 5.2;
+    const SAVED_STORAGE_KEY = 'terrapulse_saved_story_ids_v1';
+
+    let state = {
+      activeCategory: 'all',
+      activeTab: 'trending', // 'trending' | 'local' | 'saved'
+      basemapMode: 'satellite', // 'satellite' | 'vector'
+      autoRotate: false,
+      selectedStoryId: null,
+      selectedCityName: null,
+      savedIds: new Set(JSON.parse(localStorage.getItem(SAVED_STORAGE_KEY) || '[]')),
+      liveLocalStories: [],
+      localPlaceName: null,
+      localLoading: false,
+      center: { lng: 18, lat: 22 },
+      zoom: 1.85,
+      mobileSheetState: 'peek' // 'minimized' | 'peek' | 'expanded'
+    };
+
+    const reverseGeoCache = new Map();
+    const gdeltCache = new Map();
+    let lastNominatimTime = 0;
+    let localFetchTimer = null;
+    let searchDebounceTimer = null;
+    let selectedMarker = null;
+    let cityMarkers = [];
+    let styleLoaded = false;
+
+    // =========================================================================
+    // 3. STARFIELD CANVAS BACKGROUND
+    // =========================================================================
+    (function initStarfield() {
+      const canvas = document.getElementById('starfield');
+      const ctx = canvas.getContext('2d');
+      let stars = [];
+
+      function resize() {
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+        const count = Math.min(260, Math.floor((canvas.width * canvas.height) / 6800));
+        stars = Array.from({ length: count }, () => ({
+          x: Math.random() * canvas.width,
+          y: Math.random() * canvas.height,
+          r: Math.random() * 1.25 + 0.25,
+          a: Math.random() * 0.65 + 0.2,
+          tw: Math.random() * 0.015 + 0.004
+        }));
+      }
+
+      let t = 0;
+      function draw() {
+        t += 1;
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        for (const s of stars) {
+          const alpha = s.a * (0.65 + 0.35 * Math.sin(t * s.tw + s.x));
+          ctx.fillStyle = `rgba(226, 232, 240, ${alpha.toFixed(3)})`;
+          ctx.beginPath();
+          ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        requestAnimationFrame(draw);
+      }
+
+      window.addEventListener('resize', resize);
+      resize();
+      draw();
+    })();
+
+    // =========================================================================
+    // 4. GEOGRAPHIC & UTILITY HELPERS
+    // =========================================================================
+    function haversineKm(lat1, lng1, lat2, lng2) {
+      const R = 6371;
+      const toRad = d => (d * Math.PI) / 180;
+      const dLat = toRad(lat2 - lat1);
+      const dLng = toRad(lng2 - lng1);
+      const a =
+        Math.sin(dLat / 2) ** 2 +
+        Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
+      return 2 * R * Math.asin(Math.sqrt(a));
+    }
+
+    function formatCoords(lat, lng) {
+      const latDir = lat >= 0 ? 'N' : 'S';
+      const lngDir = lng >= 0 ? 'E' : 'W';
+      return `${Math.abs(lat).toFixed(2)}° ${latDir}, ${Math.abs(lng).toFixed(2)}° ${lngDir}`;
+    }
+
+    function escapeHtml(str = '') {
+      return String(str).replace(/[&<>"']/g, ch => ({
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#39;'
+      }[ch]));
+    }
+
+    function showToast(msg) {
+      const el = document.getElementById('toast');
+      el.textContent = msg;
+      el.classList.add('show');
+      clearTimeout(showToast._timer);
+      showToast._timer = setTimeout(() => el.classList.remove('show'), 2400);
+    }
+
+    function inferCategoryFromText(text = '') {
+      const t = text.toLowerCase();
+      if (/ai|robot|chip|software|cyber|quantum|tech|digital|startup|cloud/.test(t)) return 'tech';
+      if (/climate|solar|wind|carbon|flood|wildfire|ocean|emission|weather|green/.test(t)) return 'climate';
+      if (/market|trade|bank|economy|stock|inflation|port|freight|finance|gdp/.test(t)) return 'economy';
+      if (/space|rocket|nasa|telescope|genome|physics|science|orbit|satellite/.test(t)) return 'science';
+      if (/health|hospital|vaccine|disease|medical|clinic|virus|cancer/.test(t)) return 'health';
+      if (/museum|film|music|art|festival|culture|heritage|sport/.test(t)) return 'culture';
+      return 'world';
+    }
+
+    function getAllStories() {
+      // Combine curated stories + live center-fetched stories (deduplicated by id)
+      const mapById = new Map();
+      for (const s of CURATED_STORIES) mapById.set(s.id, s);
+      for (const s of state.liveLocalStories) mapById.set(s.id, s);
+      return Array.from(mapById.values());
+    }
+
+    function getFilteredStories() {
+      const all = getAllStories();
+      if (state.activeCategory === 'all') return all;
+      return all.filter(s => s.category === state.activeCategory);
+    }
+
+    // =========================================================================
+    // 5. MAPLIBRE 3D GLOBE INITIALIZATION (SATELLITE + MULTI-ZOOM VECTOR)
+    // =========================================================================
+    function buildHybridStyle(nextStyle, mode) {
+      nextStyle.projection = { type: 'globe' };
+      nextStyle.sky = {
+        'atmosphere-blend': [
+          'interpolate',
+          ['linear'],
+          ['zoom'],
+          0, 1,
+          5, 1,
+          7, 0
+        ]
+      };
+      nextStyle.light = {
+        anchor: 'map',
+        position: [1.5, 90, 80]
+      };
+
+      if (mode === 'satellite') {
+        nextStyle.sources = {
+          ...(nextStyle.sources || {}),
+          satelliteSource: {
+            type: 'raster',
+            tiles: [
+              'https://tiles.maps.eox.at/wmts/1.0.0/s2cloudless-2020_3857/default/g/{z}/{y}/{x}.jpg'
+            ],
+            tileSize: 256,
+            maxzoom: 14,
+            attribution: '© EOX Sentinel-2 Cloudless'
+          }
+        };
+
+        const styledLayers = [];
+        let insertedSat = false;
+
+        for (const layer of nextStyle.layers || []) {
+          const isBoundary = layer['source-layer'] === 'boundary';
+          const isTransport = layer['source-layer'] === 'transportation';
+          const isWaterway = layer['source-layer'] === 'waterway';
+          const isSymbol = layer.type === 'symbol';
+          const isBuilding = layer['source-layer'] === 'building';
+
+          // Insert Satellite raster layer right before vector borders/roads/labels
+          if (!insertedSat && (isBoundary || isTransport || isSymbol)) {
+            styledLayers.push({
+              id: 'eox-satellite-base',
+              type: 'raster',
+              source: 'satelliteSource',
+              minzoom: 0,
+              maxzoom: 22,
+              paint: {
+                'raster-opacity': 1,
+                'raster-contrast': 0.08,
+                'raster-saturation': 0.1
+              }
+            });
+            insertedSat = true;
+          }
+
+          // Hide opaque polygon fills so real satellite imagery shows through cleanly
+          if (layer.type === 'background' || layer.type === 'fill' || layer.type === 'hillshade') {
+            if (isBuilding) {
+              layer.paint = {
+                ...(layer.paint || {}),
+                'fill-color': 'rgba(203, 213, 225, 0.16)',
+                'fill-outline-color': 'rgba(226, 232, 240, 0.25)'
+              };
+              styledLayers.push(layer);
+            }
+            continue;
+          }
+
+          if (isBoundary && layer.type === 'line') {
+            layer.paint = {
+              ...(layer.paint || {}),
+              'line-color': 'rgba(226, 232, 240, 0.42)'
+            };
+          }
+
+          if (isTransport && layer.type === 'line') {
+            layer.paint = {
+              ...(layer.paint || {}),
+              'line-color': 'rgba(248, 250, 252, 0.28)'
+            };
+          }
+
+          if (isWaterway && layer.type === 'line') {
+            layer.paint = {
+              ...(layer.paint || {}),
+              'line-color': 'rgba(56, 189, 248, 0.35)'
+            };
+          }
+
+          if (isSymbol) {
+            const isWaterLabel =
+              layer['source-layer'] === 'water_name' ||
+              (layer.id && layer.id.toLowerCase().includes('water'));
+            layer.paint = {
+              ...(layer.paint || {}),
+              'text-color': isWaterLabel ? '#93c5fd' : '#f8fafc',
+              'text-halo-color': 'rgba(3, 7, 18, 0.92)',
+              'text-halo-width': 1.5,
+              'text-halo-blur': 0.5
+            };
+          }
+
+          styledLayers.push(layer);
+        }
+
+        if (!insertedSat) {
+          styledLayers.unshift({
+            id: 'eox-satellite-base',
+            type: 'raster',
+            source: 'satelliteSource'
+          });
+        }
+        nextStyle.layers = styledLayers;
+      }
+
+      return nextStyle;
+    }
+
+    function getFallbackSatelliteStyle() {
+      return {
+        version: 8,
+        projection: { type: 'globe' },
+        sky: {
+          'atmosphere-blend': ['interpolate', ['linear'], ['zoom'], 0, 1, 5, 1, 7, 0]
+        },
+        sources: {
+          satelliteSource: {
+            type: 'raster',
+            tiles: [
+              'https://tiles.maps.eox.at/wmts/1.0.0/s2cloudless-2020_3857/default/g/{z}/{y}/{x}.jpg'
+            ],
+            tileSize: 256,
+            maxzoom: 14,
+            attribution: '© EOX Sentinel-2 Cloudless'
+          }
+        },
+        layers: [
+          { id: 'eox-satellite-base', type: 'raster', source: 'satelliteSource' }
+        ]
+      };
+    }
+
+    const map = new maplibregl.Map({
+      container: 'map',
+      center: [state.center.lng, state.center.lat],
+      zoom: state.zoom,
+      pitch: 8,
+      bearing: 0,
+      maxPitch: 68,
+      attributionControl: true
+    });
+
+    // Standard MapLibre Zoom, Compass & Geolocation Controls
+    map.addControl(
+      new maplibregl.NavigationControl({
+        visualizePitch: true,
+        showZoom: true,
+        showCompass: true
+      }),
+      'top-right'
+    );
+
+    const geolocateCtrl = new maplibregl.GeolocateControl({
+      positionOptions: { enableHighAccuracy: true },
+      trackUserLocation: false,
+      showUserLocation: true
+    });
+    map.addControl(geolocateCtrl, 'top-right');
+
+    geolocateCtrl.on('geolocate', e => {
+      const { longitude, latitude } = e.coords;
+      flyToLocation(longitude, latitude, 7.5);
+      showToast('Centered on your location • Loading local stories');
+    });
+
+    function loadMapStyle(mode) {
+      styleLoaded = false;
+      map.setStyle('https://tiles.openfreemap.org/styles/bright', {
+        transformStyle: (_prev, nextStyle) => buildHybridStyle(nextStyle, mode)
+      });
+    }
+
+    // Fallback safety if external vector style fails
+    let fallbackApplied = false;
+    map.on('error', err => {
+      if (!styleLoaded && !fallbackApplied && err && err.error) {
+        fallbackApplied = true;
+        map.setStyle(getFallbackSatelliteStyle());
+      }
+    });
+
+    loadMapStyle(state.basemapMode);
+
+    // =========================================================================
+    // 6. ANCHORED NEWS DOTS LAYER & CLICKABLE CITY MARKERS
+    // =========================================================================
+    function storiesToGeoJSON(stories) {
+      return {
+        type: 'FeatureCollection',
+        features: stories.map(s => ({
+          type: 'Feature',
+          geometry: {
+            type: 'Point',
+            coordinates: [s.lng, s.lat]
+          },
+          properties: {
+            id: s.id,
+            title: s.title,
+            city: s.city,
+            country: s.country,
+            category: s.category,
+            source: s.source,
+            publishedAt: s.publishedAt,
+            isLive: !!s.isLive
+          }
+        }))
+      };
+    }
+
+    function ensureNewsLayers() {
+      if (!map.getSource('news-points')) {
+        map.addSource('news-points', {
+          type: 'geojson',
+          data: storiesToGeoJSON(getFilteredStories())
+        });
+      }
+
+      const colorMatch = [
+        'match',
+        ['get', 'category'],
+        'world', '#3b82f6',
+        'tech', '#a855f7',
+        'climate', '#10b981',
+        'economy', '#f59e0b',
+        'science', '#14b8a6',
+        'culture', '#ec4899',
+        'health', '#f43f5e',
+        '#38bdf8'
+      ];
+
+      if (!map.getLayer('news-dots-glow')) {
+        map.addLayer({
+          id: 'news-dots-glow',
+          type: 'circle',
+          source: 'news-points',
+          paint: {
+            'circle-radius': [
+              'interpolate', ['linear'], ['zoom'],
+              1, 10,
+              5, 13,
+              10, 17
+            ],
+            'circle-color': colorMatch,
+            'circle-opacity': 0.36,
+            'circle-blur': 0.7
+          }
+        });
+      }
+
+      if (!map.getLayer('news-dots-core')) {
+        map.addLayer({
+          id: 'news-dots-core',
+          type: 'circle',
+          source: 'news-points',
+          paint: {
+            'circle-radius': [
+              'interpolate', ['linear'], ['zoom'],
+              1, 4.8,
+              5, 6.2,
+              10, 8.2
+            ],
+            'circle-color': colorMatch,
+            'circle-stroke-width': 1.8,
+            'circle-stroke-color': '#ffffff',
+            'circle-opacity': 0.96
+          }
+        });
+      }
+    }
+
+    function syncNewsGeoJSON() {
+      const src = map.getSource('news-points');
+      if (src) {
+        src.setData(storiesToGeoJSON(getFilteredStories()));
+      }
+    }
+
+    function renderCityMarkers() {
+      for (const m of cityMarkers) m.marker.remove();
+      cityMarkers = [];
+
+      const stories = getFilteredStories();
+      for (const hub of CITY_HUBS) {
+        const count = stories.filter(
+          s => s.city.toLowerCase() === hub.name.toLowerCase()
+        ).length;
+
+        const el = document.createElement('div');
+        el.className = 'city-marker' + (state.selectedCityName === hub.name ? ' active' : '');
+        el.innerHTML = `
+          <span class="city-marker-dot"></span>
+          <span>${escapeHtml(hub.name)}</span>
+          ${count > 0 ? `<span class="city-marker-count">${count}</span>` : ''}
+        `;
+
+        el.addEventListener('click', ev => {
+          ev.stopPropagation();
+          stopAutoRotate();
+          selectCityHub(hub);
+        });
+
+        const marker = new maplibregl.Marker({ element: el, anchor: 'bottom' })
+          .setLngLat([hub.lng, hub.lat])
+          .addTo(map);
+
+        cityMarkers.push({ hub, marker, el });
+      }
+    }
+
+    function updateSelectedPulseMarker(story) {
+      if (selectedMarker) {
+        selectedMarker.remove();
+        selectedMarker = null;
+      }
+      if (!story) return;
+
+      const el = document.createElement('div');
+      el.className = 'selected-pulse-marker';
+      selectedMarker = new maplibregl.Marker({ element: el, anchor: 'center' })
+        .setLngLat([story.lng, story.lat])
+        .addTo(map);
+    }
+
+    const hoverPopup = new maplibregl.Popup({
+      closeButton: false,
+      closeOnClick: false,
+      offset: 14
+    });
+
+    map.on('style.load', () => {
+      styleLoaded = true;
+      ensureNewsLayers();
+      renderCityMarkers();
+      if (state.selectedStoryId) {
+        const s = getAllStories().find(x => x.id === state.selectedStoryId);
+        if (s) updateSelectedPulseMarker(s);
+      }
+    });
+
+    // Hover Tooltip & Cursor on News Dots
+    map.on('mouseenter', 'news-dots-core', e => {
+      map.getCanvas().style.cursor = 'pointer';
+      const feat = e.features && e.features[0];
+      if (!feat) return;
+      const p = feat.properties;
+      const cat = CATEGORY_MAP[p.category] || CATEGORY_MAP.world;
+      hoverPopup
+        .setLngLat(feat.geometry.coordinates)
+        .setHTML(`
+          <div style="font-size:10px; font-weight:700; color:${cat.color}; text-transform:uppercase; letter-spacing:0.06em; margin-bottom:3px;">
+            ${escapeHtml(cat.label)} • ${escapeHtml(p.city)}
+          </div>
+          <div style="font-size:12px; font-weight:600; line-height:1.35; color:#f8fafc;">
+            ${escapeHtml(p.title)}
+          </div>
+        `)
+        .addTo(map);
+    });
+
+    map.on('mouseleave', 'news-dots-core', () => {
+      map.getCanvas().style.cursor = '';
+      hoverPopup.remove();
+    });
+
+    // Click News Dot -> Rotate Globe Toward Location & Open Detail Panel
+    map.on('click', 'news-dots-core', e => {
+      const feat = e.features && e.features[0];
+      if (!feat) return;
+      stopAutoRotate();
+      const story = getAllStories().find(s => s.id === feat.properties.id);
+      if (story) {
+        selectStory(story, { zoom: Math.max(map.getZoom(), 5.4) });
+      }
+    });
+
+    // =========================================================================
+    // 7. CAMERA FLY-TO, PADDING & PLANETARY AUTO-ROTATION
+    // =========================================================================
+    function getFlyPadding() {
+      if (window.innerWidth <= 900) {
+        return { top: 120, bottom: 260, left: 16, right: 16 };
+      }
+      const leftOpen = !document.getElementById('left-panel').classList.contains('collapsed');
+      const rightOpen = document.body.classList.contains('detail-open');
+      return {
+        top: 100,
+        bottom: 56,
+        left: leftOpen ? 365 : 24,
+        right: rightOpen ? 405 : 24
+      };
+    }
+
+    function flyToLocation(lng, lat, targetZoom = 6.2) {
+      map.flyTo({
+        center: [lng, lat],
+        zoom: targetZoom,
+        pitch: targetZoom >= 5 ? 24 : 8,
+        duration: 1450,
+        essential: true,
+        padding: getFlyPadding()
+      });
+    }
+
+    let orbitFrame = null;
+    function stepOrbit() {
+      if (!state.autoRotate) return;
+      if (map.getZoom() < 4.2) {
+        const c = map.getCenter();
+        map.jumpTo({ center: [c.lng + 0.08, c.lat] });
+      }
+      orbitFrame = requestAnimationFrame(stepOrbit);
+    }
+
+    function stopAutoRotate() {
+      if (!state.autoRotate) return;
+      state.autoRotate = false;
+      document.getElementById('btn-orbit').classList.remove('active');
+      if (orbitFrame) cancelAnimationFrame(orbitFrame);
+    }
+
+    map.on('mousedown', stopAutoRotate);
+    map.on('touchstart', stopAutoRotate);
+    map.on('wheel', stopAutoRotate);
+
+    // =========================================================================
+    // 8. AUTOMATIC LOCAL-NEWS LOADING FROM MAP CENTER AT CLOSER ZOOM
+    // =========================================================================
+    function getPlaceFromMapFeatures() {
+      try {
+        const canvas = map.getCanvas();
+        const cx = canvas.clientWidth / 2;
+        const cy = canvas.clientHeight / 2;
+        const box = [
+          [cx - 80, cy - 80],
+          [cx + 80, cy + 80]
+        ];
+        const features = map.queryRenderedFeatures(box);
+        for (const f of features) {
+          if (
+            f.layer &&
+            f.layer['source-layer'] === 'place' &&
+            f.properties &&
+            (f.properties.name_en || f.properties.name)
+          ) {
+            return f.properties.name_en || f.properties.name;
+          }
+        }
+      } catch (_) {
+        // Ignore query error while style transitions
+      }
+      return null;
+    }
+
+    async function reverseGeocodeCenter(lat, lng) {
+      const key = `${lat.toFixed(1)},${lng.toFixed(1)}`;
+      if (reverseGeoCache.has(key)) return reverseGeoCache.get(key);
+
+      const now = Date.now();
+      if (now - lastNominatimTime < 1100) {
+        return null;
+      }
+      lastNominatimTime = now;
+
+      try {
+        const url = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat.toFixed(4)}&lon=${lng.toFixed(4)}&zoom=10&accept-language=en`;
+        const res = await fetch(url, { headers: { Accept: 'application/json' } });
+        if (!res.ok) return null;
+        const data = await res.json();
+        if (!data || data.error || !data.address) return null;
+
+        const addr = data.address;
+        const city =
+          addr.city ||
+          addr.town ||
+          addr.village ||
+          addr.municipality ||
+          addr.county ||
+          addr.state_district ||
+          addr.state;
+        const country = addr.country || '';
+        const placeObj = {
+          city: city || country || 'Regional Area',
+          country,
+          displayName: city && country && city !== country ? `${city}, ${country}` : (city || country)
+        };
+        reverseGeoCache.set(key, placeObj);
+        return placeObj;
+      } catch (_) {
+        return null;
+      }
+    }
+
+    async function fetchGDELTLocalNews(placeQuery, cityName, countryName, centerLat, centerLng) {
+      const cacheKey = placeQuery.toLowerCase();
+      const cached = gdeltCache.get(cacheKey);
+      if (cached && Date.now() - cached.ts < 5 * 60 * 1000) {
+        return cached.articles;
+      }
+
+      try {
+        const url = `https://api.gdeltproject.org/api/v2/doc/doc?query=${encodeURIComponent(`"${placeQuery}"`)}&mode=artlist&maxrecords=6&format=json&timespan=7d&sourcelang=english`;
+        const res = await fetch(url);
+        if (!res.ok) return [];
+        const rawText = await res.text();
+        if (!rawText || !rawText.trim().startsWith('{')) return [];
+        const json = JSON.parse(rawText);
+        const articles = Array.isArray(json.articles) ? json.articles : [];
+
+        const normalized = articles.slice(0, 5).map((art, idx) => {
+          // Slight spatial offset around center so live local dots are individually clickable
+          const angle = (idx * 72 * Math.PI) / 180;
+          const jitter = 0.045 + idx * 0.012;
+          const cat = inferCategoryFromText(art.title || '');
+          return {
+            id: `live-${cacheKey.replace(/\W+/g, '-')}-${idx}`,
+            title: art.title || `Local Update from ${cityName}`,
+            city: cityName,
+            country: countryName || 'Regional Dispatch',
+            lng: centerLng + Math.cos(angle) * jitter,
+            lat: centerLat + Math.sin(angle) * jitter * 0.75,
+            category: cat,
+            source: art.domain || 'GDELT Global Wire',
+            publishedAt: 'Live Dispatch',
+            trendingScore: 80 - idx,
+            summary: `Live regional dispatch indexed near ${cityName}${countryName ? ', ' + countryName : ''} via ${art.domain || 'international wire'}. Click "Open Original Source" below to read the full publication.`,
+            takeaways: [
+              `Automatically geo-loaded for map center (${centerLat.toFixed(2)}°, ${centerLng.toFixed(2)}°).`,
+              `Published by ${art.domain || 'regional newsroom'}.`
+            ],
+            fullText: `This live local dispatch was dynamically retrieved for ${cityName}${countryName ? ', ' + countryName : ''} when zooming into this region on the 3D globe.`,
+            url: art.url,
+            isLive: true
+          };
+        });
+
+        gdeltCache.set(cacheKey, { ts: Date.now(), articles: normalized });
+        return normalized;
+      } catch (_) {
+        return [];
+      }
+    }
+
+    async function loadLocalNewsForCenter(center, zoom) {
+      if (zoom < LOCAL_ZOOM_THRESHOLD) {
+        document.body.classList.remove('local-mode');
+        state.localPlaceName = null;
+        updateRadarBanner();
+        return;
+      }
+
+      document.body.classList.add('local-mode');
+      state.localLoading = true;
+      updateRadarBanner();
+
+      // 1. Instant nearest gazetteer / map-feature guess for zero-latency UI
+      let featurePlace = getPlaceFromMapFeatures();
+      let nearestGaz = null;
+      let minDist = Infinity;
+      for (const g of GAZETTEER) {
+        const d = haversineKm(center.lat, center.lng, g.lat, g.lng);
+        if (d < minDist) {
+          minDist = d;
+          nearestGaz = g;
+        }
+      }
+
+      let resolvedCity = featurePlace || (minDist < 220 ? nearestGaz.name : 'Regional Sector');
+      let resolvedCountry = minDist < 300 ? nearestGaz.country : '';
+
+      // 2. Enrich with live OpenStreetMap Nominatim reverse-geocoding
+      const geo = await reverseGeocodeCenter(center.lat, center.lng);
+      if (geo) {
+        resolvedCity = geo.city;
+        resolvedCountry = geo.country;
+        state.localPlaceName = geo.displayName;
+      } else {
+        state.localPlaceName = resolvedCountry && resolvedCity !== resolvedCountry
+          ? `${resolvedCity}, ${resolvedCountry}`
+          : resolvedCity;
+      }
+
+      updateRadarBanner();
+
+      // 3. Query live GDELT local news if we have a real place name
+      if (resolvedCity && resolvedCity !== 'Regional Sector') {
+        const queryTerm = resolvedCountry ? `${resolvedCity}` : resolvedCity;
+        const liveStories = await fetchGDELTLocalNews(
+          queryTerm,
+          resolvedCity,
+          resolvedCountry,
+          center.lat,
+          center.lng
+        );
+        state.liveLocalStories = liveStories;
+        syncNewsGeoJSON();
+      }
+
+      state.localLoading = false;
+      updateRadarBanner();
+      renderFeed();
+    }
+
+    function updateRadarBanner() {
+      const textEl = document.getElementById('radar-status-text');
+      const dotEl = document.getElementById('radar-dot');
+      const zoom = map.getZoom();
+
+      if (zoom < LOCAL_ZOOM_THRESHOLD) {
+        dotEl.style.background = '#38bdf8';
+        dotEl.style.boxShadow = '0 0 8px #38bdf8';
+        textEl.textContent = `Global View (z${zoom.toFixed(1)}) • Zoom ≥5.2 for auto local news`;
+      } else if (state.localLoading) {
+        dotEl.style.background = '#f59e0b';
+        dotEl.style.boxShadow = '0 0 8px #f59e0b';
+        textEl.textContent = `Scanning local news near ${state.localPlaceName || 'map center'}...`;
+      } else {
+        dotEl.style.background = '#10b981';
+        dotEl.style.boxShadow = '0 0 8px #10b981';
+        textEl.textContent = `Local Radar: ${state.localPlaceName || 'Active Region'}`;
+      }
+    }
+
+    function updateTelemetryHUD() {
+      const c = map.getCenter();
+      const z = map.getZoom();
+      state.center = { lng: c.lng, lat: c.lat };
+      state.zoom = z;
+
+      document.getElementById('hud-coords').textContent = formatCoords(c.lat, c.lng);
+      document.getElementById('hud-zoom').textContent = `z${z.toFixed(1)}`;
+      document.getElementById('mobile-peek-zoom').textContent = `z${z.toFixed(1)}`;
+      updateRadarBanner();
+    }
+
+    map.on('move', updateTelemetryHUD);
+    map.on('moveend', () => {
+      updateTelemetryHUD();
+      clearTimeout(localFetchTimer);
+      localFetchTimer = setTimeout(() => {
+        loadLocalNewsForCenter(map.getCenter(), map.getZoom());
+      }, 360);
+    });
+
+    // =========================================================================
+    // 9. UI RENDERING: CATEGORIES, FEED, DETAIL PANEL, SAVE & SEARCH
+    // =========================================================================
+    function renderCategories() {
+      const container = document.getElementById('category-bar');
+      const allStories = getAllStories();
+      container.innerHTML = CATEGORIES.map(cat => {
+        const count =
+          cat.id === 'all'
+            ? allStories.length
+            : allStories.filter(s => s.category === cat.id).length;
+        const activeClass = state.activeCategory === cat.id ? 'active' : '';
+        return `
+          <button class="cat-chip ${activeClass}" data-cat="${cat.id}">
+            <span class="cat-dot" style="background:${cat.color};"></span>
+            <span>${escapeHtml(cat.label)}</span>
+            <span style="opacity:0.65; font-size:10.5px;">${count}</span>
+          </button>
+        `;
+      }).join('');
+
+      container.querySelectorAll('.cat-chip').forEach(btn => {
+        btn.addEventListener('click', () => {
+          state.activeCategory = btn.dataset.cat;
+          renderCategories();
+          syncNewsGeoJSON();
+          renderCityMarkers();
+          renderFeed();
+        });
+      });
+    }
+
+    function getFeedStoriesForActiveTab() {
+      const filtered = getFilteredStories();
+      const c = map.getCenter();
+
+      if (state.activeTab === 'saved') {
+        return filtered.filter(s => state.savedIds.has(s.id));
+      }
+
+      if (state.activeTab === 'local') {
+        return [...filtered]
+          .map(s => ({
+            ...s,
+            _distKm: Math.round(haversineKm(c.lat, c.lng, s.lat, s.lng))
+          }))
+          .sort((a, b) => {
+            // Prioritize live center-fetched dispatches when zoomed in, then closest distance
+            if (a.isLive && !b.isLive && a._distKm < 250) return -1;
+            if (!a.isLive && b.isLive && b._distKm < 250) return 1;
+            return a._distKm - b._distKm;
+          })
+          .slice(0, 18);
+      }
+
+      // Trending tab
+      return [...filtered].sort((a, b) => (b.trendingScore || 0) - (a.trendingScore || 0));
+    }
+
+    function renderFeed() {
+      const listEl = document.getElementById('feed-list');
+      const stories = getFeedStoriesForActiveTab();
+      document.getElementById('feed-count-pill').textContent = `${stories.length} items`;
+
+      if (stories.length === 0) {
+        listEl.innerHTML = `
+          <div class="empty-state">
+            ${state.activeTab === 'saved'
+              ? 'No saved stories yet.<br/>Click the bookmark icon on any dispatch to save it here.'
+              : 'No stories match this topic filter.'}
+          </div>
+        `;
+        return;
+      }
+
+      listEl.innerHTML = stories.map(s => {
+        const cat = CATEGORY_MAP[s.category] || CATEGORY_MAP.world;
+        const isSaved = state.savedIds.has(s.id);
+        const isSelected = state.selectedStoryId === s.id;
+        const distBadge = typeof s._distKm === 'number' ? ` • ${s._distKm.toLocaleString()} km` : '';
+        const liveTag = s.isLive
+          ? `<span style="color:#10b981; font-weight:600;">● LIVE</span>`
+          : escapeHtml(s.publishedAt);
+
+        return `
+          <article class="story-card ${isSelected ? 'selected' : ''}" data-story-id="${escapeHtml(s.id)}">
+            <div class="story-card-top">
+              <span class="badge-cat" style="background:${cat.color}22; color:${cat.color}; border:1px solid ${cat.color}44;">
+                ${escapeHtml(cat.label)}
+              </span>
+              <span class="story-loc">${escapeHtml(s.city)}${distBadge}</span>
+            </div>
+            <h3 class="story-card-title">${escapeHtml(s.title)}</h3>
+            <div class="story-card-foot">
+              <span>${escapeHtml(s.source)} • ${liveTag}</span>
+              <button class="bookmark-mini-btn ${isSaved ? 'saved' : ''}" data-save-id="${escapeHtml(s.id)}" title="${isSaved ? 'Remove bookmark' : 'Save story'}">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="${isSaved ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="2">
+                  <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path>
+                </svg>
+              </button>
+            </div>
+          </article>
+        `;
+      }).join('');
+
+      listEl.querySelectorAll('.story-card').forEach(card => {
+        card.addEventListener('click', e => {
+          if (e.target.closest('.bookmark-mini-btn')) return;
+          const story = getAllStories().find(x => x.id === card.dataset.storyId);
+          if (story) {
+            stopAutoRotate();
+            selectStory(story, { zoom: Math.max(map.getZoom(), 5.6) });
+          }
+        });
+      });
+
+      listEl.querySelectorAll('.bookmark-mini-btn').forEach(btn => {
+        btn.addEventListener('click', e => {
+          e.stopPropagation();
+          toggleSaveStory(btn.dataset.saveId);
+        });
+      });
+    }
+
+    function updateSavedBadges() {
+      const count = state.savedIds.size;
+      document.getElementById('saved-badge').textContent = count;
+      document.getElementById('tab-saved-count').textContent = count;
+    }
+
+    function toggleSaveStory(storyId) {
+      if (state.savedIds.has(storyId)) {
+        state.savedIds.delete(storyId);
+        showToast('Removed from Saved Stories');
+      } else {
+        state.savedIds.add(storyId);
+        showToast('Story saved to your reading list');
+      }
+      localStorage.setItem(SAVED_STORAGE_KEY, JSON.stringify([...state.savedIds]));
+      updateSavedBadges();
+      renderFeed();
+      if (state.selectedStoryId === storyId) {
+        const s = getAllStories().find(x => x.id === storyId);
+        if (s) renderDetailPanel(s);
+      }
+    }
+
+    function selectStory(story, opts = {}) {
+      state.selectedStoryId = story.id;
+      state.selectedCityName = story.city;
+      document.body.classList.add('detail-open');
+
+      updateSelectedPulseMarker(story);
+      renderCityMarkers();
+      renderDetailPanel(story);
+      renderFeed();
+
+      const targetZoom = opts.zoom ?? Math.max(map.getZoom(), 5.5);
+      flyToLocation(story.lng, story.lat, targetZoom);
+    }
+
+    function selectCityHub(hub) {
+      state.selectedCityName = hub.name;
+      const cityStories = getFilteredStories().filter(
+        s => s.city.toLowerCase() === hub.name.toLowerCase()
+      );
+      if (cityStories.length > 0) {
+        selectStory(cityStories[0], { zoom: 6.4 });
+      } else {
+        // If category filter hides stories in this city, show nearest story and still fly there
+        flyToLocation(hub.lng, hub.lat, 6.4);
+        renderCityMarkers();
+        showToast(`Exploring ${hub.name}, ${hub.country}`);
+      }
+    }
+
+    function renderDetailPanel(story) {
+      const cat = CATEGORY_MAP[story.category] || CATEGORY_MAP.world;
+      const isSaved = state.savedIds.has(story.id);
+
+      document.getElementById('detail-location-name').textContent =
+        story.country && story.city !== story.country
+          ? `${story.city}, ${story.country}`
+          : story.city;
+      document.getElementById('detail-coords').textContent = formatCoords(story.lat, story.lng);
+
+      // Regional nearby dispatches
+      const nearby = getAllStories()
+        .filter(s => s.id !== story.id)
+        .map(s => ({ ...s, dist: haversineKm(story.lat, story.lng, s.lat, s.lng) }))
+        .sort((a, b) => a.dist - b.dist)
+        .slice(0, 4);
+
+      const detailBody = document.getElementById('detail-body');
+      detailBody.innerHTML = `
+        <div class="detail-meta-row">
+          <span class="badge-cat" style="background:${cat.color}24; color:${cat.color}; border:1px solid ${cat.color}55;">
+            ${escapeHtml(cat.label)}
+          </span>
+          <span style="font-size:11.5px; color:var(--text-muted);">
+            ${escapeHtml(story.publishedAt)}
+          </span>
+          ${story.isLive ? `<span style="font-size:10.5px; color:#10b981; font-weight:700;">● LIVE FEED</span>` : ''}
+        </div>
+
+        <h2 class="detail-headline">${escapeHtml(story.title)}</h2>
+
+        <div class="detail-source-bar">
+          <div>
+            <span style="color:var(--text-muted);">Source:</span>
+            <strong style="color:var(--text-primary); margin-left:4px;">${escapeHtml(story.source)}</strong>
+          </div>
+          <span style="font-family:'JetBrains Mono', monospace; font-size:11px; color:var(--accent-cyan);">
+            ${escapeHtml(story.city)}
+          </span>
+        </div>
+
+        <p class="detail-summary">${escapeHtml(story.summary)}</p>
+
+        ${story.takeaways && story.takeaways.length ? `
+          <div class="detail-takeaways">
+            <h4>Key Takeaways</h4>
+            <ul>
+              ${story.takeaways.map(t => `<li>${escapeHtml(t)}</li>`).join('')}
+            </ul>
+          </div>
+        ` : ''}
+
+        <div class="detail-actions">
+          <button class="action-btn ${isSaved ? 'saved' : ''}" id="detail-save-btn">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="${isSaved ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="2">
+              <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path>
+            </svg>
+            <span>${isSaved ? 'Saved' : 'Save Story'}</span>
+          </button>
+
+          ${story.url ? `
+            <a class="action-btn primary" href="${escapeHtml(story.url)}" target="_blank" rel="noopener noreferrer">
+              <span>Read Source ↗</span>
+            </a>
+          ` : `
+            <button class="action-btn primary" id="detail-read-modal-btn">
+              <span>Full Dispatch</span>
+            </button>
+          `}
+        </div>
+
+        <div class="regional-list-section">
+          <h4>Regional &amp; Nearby Dispatches</h4>
+          ${nearby.map(n => {
+            const nc = CATEGORY_MAP[n.category] || CATEGORY_MAP.world;
+            return `
+              <div class="regional-mini-card" data-nearby-id="${escapeHtml(n.id)}">
+                <div style="display:flex; justify-content:space-between; font-size:10.5px; margin-bottom:4px;">
+                  <span style="color:${nc.color}; font-weight:600;">${escapeHtml(nc.label)}</span>
+                  <span style="color:var(--text-muted);">${escapeHtml(n.city)} • ${Math.round(n.dist).toLocaleString()} km</span>
+                </div>
+                <div style="font-size:12.5px; font-weight:600; line-height:1.35; color:var(--text-primary);">
+                  ${escapeHtml(n.title)}
+                </div>
+              </div>
+            `;
+          }).join('')}
+        </div>
+      `;
+
+      document.getElementById('detail-save-btn').addEventListener('click', () => {
+        toggleSaveStory(story.id);
+      });
+
+      const readModalBtn = document.getElementById('detail-read-modal-btn');
+      if (readModalBtn) {
+        readModalBtn.addEventListener('click', () => openDispatchModal(story));
+      }
+
+      detailBody.querySelectorAll('.regional-mini-card').forEach(card => {
+        card.addEventListener('click', () => {
+          const target = getAllStories().find(x => x.id === card.dataset.nearbyId);
+          if (target) selectStory(target, { zoom: Math.max(map.getZoom(), 5.5) });
+        });
+      });
+    }
+
+    function openDispatchModal(story) {
+      const cat = CATEGORY_MAP[story.category] || CATEGORY_MAP.world;
+      const badge = document.getElementById('modal-badge');
+      badge.textContent = cat.label;
+      badge.style.background = `${cat.color}24`;
+      badge.style.color = cat.color;
+      badge.style.border = `1px solid ${cat.color}55`;
+
+      document.getElementById('modal-title').textContent = story.title;
+      document.getElementById('modal-meta').textContent =
+        `${story.city}, ${story.country} • ${story.source} • ${story.publishedAt} • ${formatCoords(story.lat, story.lng)}`;
+
+      document.getElementById('modal-content').innerHTML = `
+        <p>${escapeHtml(story.summary)}</p>
+        <p>${escapeHtml(story.fullText || '')}</p>
+      `;
+
+      document.getElementById('modal-footer').innerHTML = `
+        <span style="font-size:11.5px; color:var(--text-muted);">TerraPulse Geo-Verified Dispatch</span>
+        <button class="pill-btn" id="modal-fly-btn">Center Globe on Pin</button>
+      `;
+
+      document.getElementById('modal-fly-btn').addEventListener('click', () => {
+        document.getElementById('dispatch-modal').classList.remove('open');
+        flyToLocation(story.lng, story.lat, 8.5);
+      });
+
+      document.getElementById('dispatch-modal').classList.add('open');
+    }
+
+    // =========================================================================
+    // 10. LIVE LOCATION & STORY SEARCH (GAZETTEER + PHOTON GEOCODER)
+    // =========================================================================
+    const searchInput = document.getElementById('search-input');
+    const searchDropdown = document.getElementById('search-dropdown');
+    const clearSearchBtn = document.getElementById('clear-search');
+
+    async function runSearch(query) {
+      const q = query.trim().toLowerCase();
+      if (!q) {
+        searchDropdown.classList.remove('open');
+        return;
+      }
+
+      // Local gazetteer matches
+      const localPlaces = GAZETTEER.filter(
+        p => p.name.toLowerCase().includes(q) || p.country.toLowerCase().includes(q)
+      ).slice(0, 4);
+
+      // Story matches
+      const storyMatches = getAllStories().filter(
+        s =>
+          s.title.toLowerCase().includes(q) ||
+          s.city.toLowerCase().includes(q) ||
+          s.country.toLowerCase().includes(q) ||
+          s.source.toLowerCase().includes(q) ||
+          s.category.toLowerCase().includes(q)
+      ).slice(0, 5);
+
+      renderSearchDropdown(localPlaces, storyMatches, []);
+
+      // Live Photon OpenStreetMap geocoding for any city/town worldwide
+      if (q.length >= 2) {
+        try {
+          const res = await fetch(`https://photon.komoot.io/api/?q=${encodeURIComponent(query)}&limit=4&lang=en`);
+          if (res.ok) {
+            const data = await res.json();
+            const remotePlaces = (data.features || []).map(f => ({
+              name: f.properties.name || f.properties.city || query,
+              country: [f.properties.state, f.properties.country].filter(Boolean).join(', '),
+              lng: f.geometry.coordinates[0],
+              lat: f.geometry.coordinates[1]
+            }));
+            if (searchInput.value.trim().toLowerCase() === q) {
+              renderSearchDropdown(localPlaces, storyMatches, remotePlaces);
+            }
+          }
+        } catch (_) {
+          // Offline or blocked; local matches still show seamlessly
+        }
+      }
+    }
+
+    function renderSearchDropdown(localPlaces, storyMatches, remotePlaces) {
+      const combinedPlaces = [...localPlaces];
+      for (const rp of remotePlaces) {
+        if (!combinedPlaces.some(lp => lp.name.toLowerCase() === rp.name.toLowerCase())) {
+          combinedPlaces.push(rp);
+        }
+      }
+
+      if (combinedPlaces.length === 0 && storyMatches.length === 0) {
+        searchDropdown.innerHTML = `<div class="empty-state" style="padding:18px;">No matching locations or dispatches found.</div>`;
+        searchDropdown.classList.add('open');
+        return;
+      }
+
+      let html = '';
+      if (combinedPlaces.length > 0) {
+        html += `<div class="search-section-label">Locations &amp; Cities</div>`;
+        html += combinedPlaces.slice(0, 5).map((p, idx) => `
+          <div class="search-item" data-place-idx="${idx}">
+            <div class="search-item-icon">📍</div>
+            <div class="search-item-meta">
+              <div class="search-item-title">${escapeHtml(p.name)}</div>
+              <div class="search-item-sub">${escapeHtml(p.country)} • ${formatCoords(p.lat, p.lng)}</div>
+            </div>
+          </div>
+        `).join('');
+      }
+
+      if (storyMatches.length > 0) {
+        html += `<div class="search-section-label">News Dispatches</div>`;
+        html += storyMatches.map(s => `
+          <div class="search-item" data-story-id="${escapeHtml(s.id)}">
+            <div class="search-item-icon">📰</div>
+            <div class="search-item-meta">
+              <div class="search-item-title">${escapeHtml(s.title)}</div>
+              <div class="search-item-sub">${escapeHtml(s.city)}, ${escapeHtml(s.country)} • ${escapeHtml(s.source)}</div>
+            </div>
+          </div>
+        `).join('');
+      }
+
+      searchDropdown.innerHTML = html;
+      searchDropdown.classList.add('open');
+
+      searchDropdown.querySelectorAll('[data-place-idx]').forEach(el => {
+        el.addEventListener('click', () => {
+          const place = combinedPlaces[Number(el.dataset.placeIdx)];
+          searchDropdown.classList.remove('open');
+          stopAutoRotate();
+          flyToLocation(place.lng, place.lat, 7.2);
+          state.activeTab = 'local';
+          syncTabButtons();
+          showToast(`Flying to ${place.name} • Loading local news`);
+        });
+      });
+
+      searchDropdown.querySelectorAll('[data-story-id]').forEach(el => {
+        el.addEventListener('click', () => {
+          const story = getAllStories().find(s => s.id === el.dataset.storyId);
+          searchDropdown.classList.remove('open');
+          if (story) {
+            stopAutoRotate();
+            selectStory(story, { zoom: 6.4 });
+          }
+        });
+      });
+    }
+
+    searchInput.addEventListener('input', () => {
+      const val = searchInput.value;
+      clearSearchBtn.classList.toggle('visible', val.length > 0);
+      clearTimeout(searchDebounceTimer);
+      searchDebounceTimer = setTimeout(() => runSearch(val), 200);
+    });
+
+    searchInput.addEventListener('focus', () => {
+      if (searchInput.value.trim()) runSearch(searchInput.value);
+    });
+
+    clearSearchBtn.addEventListener('click', () => {
+      searchInput.value = '';
+      clearSearchBtn.classList.remove('visible');
+      searchDropdown.classList.remove('open');
+      searchInput.focus();
+    });
+
+    document.addEventListener('click', e => {
+      if (!e.target.closest('.search-wrapper')) {
+        searchDropdown.classList.remove('open');
+      }
+    });
+
+    // =========================================================================
+    // 11. EVENT WIRING & INITIAL RENDER
+    // =========================================================================
+    function syncTabButtons() {
+      document.querySelectorAll('.tab-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.tab === state.activeTab);
+      });
+    }
+
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        state.activeTab = btn.dataset.tab;
+        syncTabButtons();
+        renderFeed();
+      });
+    });
+
+    document.getElementById('btn-saved-header').addEventListener('click', () => {
+      state.activeTab = 'saved';
+      syncTabButtons();
+      document.getElementById('left-panel').classList.remove('collapsed');
+      renderFeed();
+      if (window.innerWidth <= 900) {
+        const lp = document.getElementById('left-panel');
+        lp.classList.remove('mobile-minimized');
+        lp.classList.add('mobile-expanded');
+      }
+    });
+
+    document.getElementById('btn-basemap').addEventListener('click', () => {
+      state.basemapMode = state.basemapMode === 'satellite' ? 'vector' : 'satellite';
+      const isSat = state.basemapMode === 'satellite';
+      document.getElementById('basemap-label').textContent = isSat ? 'Satellite' : 'Vector';
+      document.getElementById('btn-basemap').classList.toggle('active', isSat);
+      loadMapStyle(state.basemapMode);
+      showToast(isSat ? 'Switched to Satellite Hybrid Globe' : 'Switched to Vector Atlas Globe');
+    });
+
+    document.getElementById('btn-orbit').addEventListener('click', () => {
+      state.autoRotate = !state.autoRotate;
+      document.getElementById('btn-orbit').classList.toggle('active', state.autoRotate);
+      if (state.autoRotate) {
+        if (map.getZoom() > 3.5) {
+          map.flyTo({ zoom: 1.9, pitch: 8, duration: 900 });
+        }
+        stepOrbit();
+        showToast('Planetary spin enabled (drag anywhere to pause)');
+      } else {
+        if (orbitFrame) cancelAnimationFrame(orbitFrame);
+      }
+    });
+
+    document.getElementById('brand-reset').addEventListener('click', () => {
+      stopAutoRotate();
+      document.body.classList.remove('detail-open');
+      state.selectedStoryId = null;
+      state.selectedCityName = null;
+      updateSelectedPulseMarker(null);
+      renderCityMarkers();
+      renderFeed();
+      map.flyTo({ center: [18, 22], zoom: 1.85, pitch: 8, bearing: 0, duration: 1400, padding: { top: 0, bottom: 0, left: 0, right: 0 } });
+    });
+
+    document.getElementById('btn-collapse-left').addEventListener('click', () => {
+      document.getElementById('left-panel').classList.add('collapsed');
+    });
+
+    document.getElementById('btn-expand-left').addEventListener('click', () => {
+      document.getElementById('left-panel').classList.remove('collapsed');
+    });
+
+    document.getElementById('btn-close-detail').addEventListener('click', () => {
+      document.body.classList.remove('detail-open');
+      state.selectedStoryId = null;
+      updateSelectedPulseMarker(null);
+      renderFeed();
+    });
+
+    document.getElementById('btn-fly-detail').addEventListener('click', () => {
+      const s = getAllStories().find(x => x.id === state.selectedStoryId);
+      if (s) flyToLocation(s.lng, s.lat, 11.5);
+    });
+
+    document.getElementById('btn-close-modal').addEventListener('click', () => {
+      document.getElementById('dispatch-modal').classList.remove('open');
+    });
+
+    document.getElementById('dispatch-modal').addEventListener('click', e => {
+      if (e.target.id === 'dispatch-modal') {
+        document.getElementById('dispatch-modal').classList.remove('open');
+      }
+    });
+
+    // Mobile Bottom Sheet Toggle
+    document.getElementById('mobile-sheet-toggle').addEventListener('click', () => {
+      const lp = document.getElementById('left-panel');
+      const chev = document.getElementById('mobile-sheet-chevron');
+      if (lp.classList.contains('mobile-expanded')) {
+        lp.classList.remove('mobile-expanded');
+        lp.classList.add('mobile-minimized');
+        chev.textContent = '▲';
+      } else if (lp.classList.contains('mobile-minimized')) {
+        lp.classList.remove('mobile-minimized');
+        chev.textContent = '▲';
+      } else {
+        lp.classList.add('mobile-expanded');
+        chev.textContent = '▼';
+      }
+    });
+
+    // Quick-Jump Cities in Bottom HUD
+    function renderQuickCities() {
+      const picks = ['New York', 'London', 'New Delhi', 'Nairobi', 'Tokyo', 'São Paulo', 'Sydney'];
+      const container = document.getElementById('quick-cities');
+      container.innerHTML = picks.map(name => `
+        <button class="quick-city-btn" data-hub-name="${escapeHtml(name)}">${escapeHtml(name)}</button>
+      `).join('');
+
+      container.querySelectorAll('.quick-city-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const hub = CITY_HUBS.find(h => h.name === btn.dataset.hubName);
+          if (hub) {
+            stopAutoRotate();
+            selectCityHub(hub);
+          }
+        });
+      });
+    }
+
+    // Boot
+    renderCategories();
+    renderQuickCities();
+    updateSavedBadges();
+    renderFeed();
+    updateTelemetryHUD();
+  </script>
+</body>
+</html>
